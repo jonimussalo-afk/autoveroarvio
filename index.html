@@ -23,6 +23,7 @@
     #tila { font-size: 12.5px; background: #1c2742; border: 1px solid #2c3b60; padding: 7px 12px; border-radius: 8px; color: #d6deef; }
     main { max-width: 1240px; margin: 22px auto 40px; padding: 0 20px; display: grid; grid-template-columns: 400px 1fr; gap: 20px; }
     @media (max-width: 960px) { main { grid-template-columns: 1fr; } }
+    main > section { min-width: 0; } /* leveä verrokkitaulukko vierii omassa laatikossaan */
     .kortti { background: var(--kortti); border: 1px solid var(--raja); border-radius: 12px; padding: 18px; margin-bottom: 16px; }
     .kortti h2 { font-size: 15px; margin: 0 0 12px; }
     label { display: block; font-size: 12.5px; font-weight: 600; color: var(--heikko); margin: 10px 0 4px; }
