@@ -20,12 +20,13 @@ concurrency:
 
 jobs:
   paivita:
-    runs-on: ubuntu-latest
+    # Kiinteä versio: ubuntu-latest vaihtuu Ubuntu 26:een 19.10.2026 alkaen
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -35,9 +36,10 @@ jobs:
       - name: Hae Verohallinnon taulukot
         run: python tyokalut/hae_aineisto.py --vuosia 4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
+          package-manager-cache: false
 
       - name: Opeta malli ja mittaa tarkkuus
         run: node tyokalut/rakenna_malli.mjs
