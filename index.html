@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tuontiauton autoveroarvio – harvinaiset autot</title>
+  <meta name="description" content="Arvio tuontiauton verotusarvosta ja autoverosta Verohallinnon aiempien päätösten perusteella.">
+  <style>
+    :root {
+      --tausta: #f4f5f7; --kortti: #fff; --teksti: #1d2433; --heikko: #5b6475; --raja: #dde1e8;
+      --paa: #1f4fd1; --paa-vaalea: #e8eefc; --ok: #13795b; --ok-vaalea: #e3f4ee; --varoitus: #9a5b00;
+      --varoitus-vaalea: #fff3df; --vaara: #b42318; --vaara-vaalea: #fde8e7;
+      --malli: #1f4fd1; --sarja: #5b8def; --merkki: #a7c0f5; --kaikki: #d5dbe6;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--tausta);
+      color: var(--teksti); font-size: 15px; line-height: 1.45; }
+    header { background: #111a2e; color: #fff; padding: 18px 24px; }
+    header .sisalto { max-width: 1240px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 12px 24px;
+      align-items: center; justify-content: space-between; }
+    h1 { font-size: 21px; margin: 0; letter-spacing: -0.2px; }
+    header p { margin: 3px 0 0; color: #b8c2d8; font-size: 13.5px; }
+    #tila { font-size: 12.5px; background: #1c2742; border: 1px solid #2c3b60; padding: 7px 12px; border-radius: 8px; color: #d6deef; }
+    main { max-width: 1240px; margin: 22px auto 40px; padding: 0 20px; display: grid; grid-template-columns: 400px 1fr; gap: 20px; }
+    @media (max-width: 960px) { main { grid-template-columns: 1fr; } }
+    .kortti { background: var(--kortti); border: 1px solid var(--raja); border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+    .kortti h2 { font-size: 15px; margin: 0 0 12px; }
+    label { display: block; font-size: 12.5px; font-weight: 600; color: var(--heikko); margin: 10px 0 4px; }
+    input, select { width: 100%; padding: 8px 10px; border: 1px solid #c6ccd8; border-radius: 8px; font-size: 14.5px;
+      background: #fff; color: var(--teksti); font-family: inherit; }
+    input:focus, select:focus { outline: 2px solid var(--paa-vaalea); border-color: var(--paa); }
+    .rivi { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .rivi3 { display: grid; grid-template-columns: 1.2fr 1.2fr 0.8fr; gap: 10px; }
+    .vihje { font-size: 12px; color: var(--heikko); margin-top: 4px; }
+    .napit { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .napit button { border: 1px solid #c6ccd8; background: #f7f8fa; border-radius: 999px; padding: 3px 10px; font-size: 12px;
+      cursor: pointer; color: var(--teksti); }
+    .napit button:hover { background: var(--paa-vaalea); border-color: var(--paa); }
+    details summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+    .harvinaisuus { border-radius: 12px; padding: 14px 16px; margin-bottom: 16px; border: 1px solid; }
+    .harvinaisuus strong { font-size: 15px; }
+    .harvinaisuus p { margin: 4px 0 0; font-size: 13.5px; }
+    .h-yleinen { background: var(--ok-vaalea); border-color: #a8dcc8; }
+    .h-harvinainen { background: var(--paa-vaalea); border-color: #b9cbf6; }
+    .h-erittain { background: var(--varoitus-vaalea); border-color: #f1cf95; }
+    .luvut { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    @media (max-width: 700px) { .luvut { grid-template-columns: 1fr; } }
+    .luku { background: var(--kortti); border: 1px solid var(--raja); border-radius: 12px; padding: 14px 16px; }
+    .luku.paa { background: var(--paa); color: #fff; border-color: var(--paa); }
+    .luku .otsake { font-size: 12px; text-transform: uppercase; letter-spacing: .4px; opacity: .8; font-weight: 600; }
+    .luku .arvo { font-size: 28px; font-weight: 750; margin-top: 2px; letter-spacing: -0.5px; }
+    .luku .vali { font-size: 13px; margin-top: 4px; opacity: .9; }
+    .palkki { display: flex; height: 22px; border-radius: 6px; overflow: hidden; border: 1px solid var(--raja); }
+    .palkki div { height: 100%; }
+    .selitteet { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; font-size: 12.5px; color: var(--heikko); }
+    .selitteet span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px;
+      background: var(--v); vertical-align: -1px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .3px; color: var(--heikko);
+      border-bottom: 1px solid var(--raja); padding: 6px 6px; white-space: nowrap; }
+    td { border-bottom: 1px solid #eef0f4; padding: 6px 6px; white-space: nowrap; }
+    td.oikea, th.oikea { text-align: right; }
+    .taulukko { overflow-x: auto; }
+    .merkki-taso { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; font-weight: 600; }
+    .t-malli { background: var(--malli); color: #fff; } .t-sarja { background: var(--sarja); color: #fff; }
+    .t-merkki { background: var(--merkki); color: #13224a; }
+    .painopalkki { height: 6px; background: var(--paa); border-radius: 3px; min-width: 2px; }
+    .huomio { background: var(--varoitus-vaalea); border: 1px solid #f1cf95; color: #5c3b00; border-radius: 8px; padding: 8px 10px;
+      font-size: 13px; margin-top: 8px; }
+    .virhe { background: var(--vaara-vaalea); border: 1px solid #f3b8b3; color: var(--vaara); border-radius: 8px; padding: 10px 12px; }
+    .pieni { font-size: 12.5px; color: var(--heikko); }
+    .ennakko { background: var(--vaara-vaalea); border: 1px solid #f3b8b3; border-radius: 12px; padding: 14px 16px; margin: -4px 0 16px; }
+    .ennakko strong { font-size: 15px; color: var(--vaara); }
+    .ennakko p { margin: 6px 0 0; font-size: 13.5px; }
+    .ennakko ul { margin: 6px 0 0; padding-left: 20px; font-size: 13.5px; }
+    .sp-merkki { display: inline-block; font-size: 10.5px; padding: 0 6px; margin-left: 6px; border-radius: 999px;
+      border: 1px solid #c9ced8; color: var(--heikko); vertical-align: 1px; }
+    .tyhja { color: var(--heikko); padding: 30px; text-align: center; }
+    a { color: var(--paa); }
+    footer { max-width: 1240px; margin: 0 auto 40px; padding: 0 20px; font-size: 12.5px; color: var(--heikko); }
+    .tarkkuus td, .tarkkuus th { white-space: normal; }
+    button.linkki { background: none; border: none; color: var(--paa); text-decoration: underline; cursor: pointer; padding: 0; font: inherit; }
+  </style>
+</head>
+<body>
+<header>
+  <div class="sisalto">
+    <div>
+      <h1>Tuontiauton autoveroarvio</h1>
+      <p>Arvio verotusarvosta ja autoverosta Verohallinnon aiempien päätösten perusteella – rakennettu erityisesti harvinaisille autoille.</p>
+    </div>
+    <div id="tila">Ladataan aineistoa…</div>
+  </div>
+</header>
+
+<main>
+  <section>
+    <form id="lomake" class="kortti" autocomplete="off" onsubmit="return false">
+      <h2>1. Auto</h2>
+      <label for="merkki">Merkki</label>
+      <input id="merkki" list="merkit" placeholder="esim. PORSCHE">
+      <datalist id="merkit"></datalist>
+
+      <label for="malli">Malli</label>
+      <input id="malli" list="mallit" placeholder="esim. 911 GT3">
+      <datalist id="mallit"></datalist>
+      <div class="vihje">Kirjoita malli vapaasti. Laskuri etsii myös nimeltään lähellä olevat mallit.</div>
+
+      <div class="rivi">
+        <div>
+          <label for="kw">Teho (kW)</label>
+          <input id="kw" type="number" min="10" max="1500" step="1" placeholder="esim. 375">
+        </div>
+        <div>
+          <label for="kayttovoima">Käyttövoima</label>
+          <select id="kayttovoima"></select>
+        </div>
+      </div>
+      <div id="tehot" class="napit"></div>
+
+      <div class="rivi">
+        <div>
+          <label for="korimalli">Korimalli</label>
+          <select id="korimalli"></select>
+        </div>
+        <div>
+          <label for="vetotapa">Vetotapa</label>
+          <select id="vetotapa"></select>
+        </div>
+      </div>
+
+      <div class="rivi3">
+        <div>
+          <label for="cm3">Iskutilavuus (cm³)</label>
+          <input id="cm3" type="number" min="0" max="10000" step="1" placeholder="esim. 3996">
+        </div>
+        <div>
+          <label for="vaihteisto">Vaihteisto</label>
+          <select id="vaihteisto">
+            <option value="">Ei tiedossa</option>
+            <option value="AUT">Automaatti</option>
+            <option value="MAN">Manuaali</option>
+          </select>
+        </div>
+        <div>
+          <label for="ovet">Ovet</label>
+          <input id="ovet" type="number" min="0" max="6" step="1" placeholder="esim. 2">
+        </div>
+      </div>
+      <div class="vihje">Iskutilavuus ja päästöt erottavat saman tehoiset versiot toisistaan. Sähköautolle iskutilavuutta ei tarvita.</div>
+
+
+      <div class="rivi">
+        <div>
+          <label for="ensirek">Ensirekisteröintipäivä</label>
+          <input id="ensirek" type="date">
+        </div>
+        <div>
+          <label for="km">Ajokilometrit</label>
+          <input id="km" type="number" min="0" step="1000" placeholder="esim. 25000">
+        </div>
+      </div>
+      <div class="vihje">Ensirekisteröinti tarkoittaa ensimmäistä rekisteröintiä missä tahansa maassa.</div>
+    </form>
+
+    <div class="kortti">
+      <h2>2. Veroprosentti</h2>
+      <div class="rivi">
+        <div>
+          <label for="wltp">CO2, WLTP (g/km)</label>
+          <input id="wltp" type="number" min="0" max="999" placeholder="esim. 299">
+        </div>
+        <div>
+          <label for="nedc">CO2, NEDC (g/km)</label>
+          <input id="nedc" type="number" min="0" max="999" placeholder="jos tiedossa">
+        </div>
+      </div>
+      <div class="vihje">Löytyvät auton vaatimustenmukaisuustodistuksesta (CoC). Täyssähköautolle ei tarvita.
+        Päästöjä käytetään myös verrokkien valintaan.</div>
+      <div id="malliprosRivi" hidden>
+        <label for="mallipros">Mallikohtainen vertailuprosentti (%)</label>
+        <input id="mallipros" type="number" min="0" max="50" step="0.1" placeholder="jos malli löytyy luettelosta">
+        <div class="vihje">Ennen vuotta 2008 käyttöön otetuille autoille Verohallinnolla on mallikohtaiset vertailuprosentit:
+          <a href="https://vero.fi/globalassets/henkiloasiakkaat/autoverotus/mallikohtainen-vertailuveroprosentti-kun-kayttoonottopaiva-on-vuosina-20032007.pdf" target="_blank" rel="noopener">2003–2007</a> ja
+          <a href="https://vero.fi/globalassets/henkiloasiakkaat/autoverotus/mallikohtaiset-vertailuveroprosentit-autoille-joiden-kayttoonottopaiva-on-ennen-1.1.2003.pdf" target="_blank" rel="noopener">ennen 2003</a>.
+          Veroprosentti on pienin vertailuprosentti ja päästöihin perustuva prosentti.</div>
+      </div>
+      <label for="omapros">Tai syötä veroprosentti itse (%)</label>
+      <input id="omapros" type="number" min="0" max="50" step="0.1" placeholder="ohittaa lasketun prosentin">
+    </div>
+
+    <details class="kortti">
+      <summary>3. Lisätiedot (valinnainen)</summary>
+      <label for="verotus">Arvioitu verotuspäivä</label>
+      <input id="verotus" type="date">
+      <div class="vihje">Auton arvo lasketaan verotushetken mukaan. Oletus on tämä päivä.</div>
+      <label for="uushinta">Vastaavan uuden auton hinta Suomessa (€)</label>
+      <input id="uushinta" type="number" min="0" step="1000" placeholder="esim. 250000">
+      <div class="vihje">Jos markkinatietoja ei ole riittävästi, Verohallinto voi johtaa arvon vastaavan uuden auton
+        hinnasta. Syötä hinta, niin laskuri näyttää myös tämän laskennallisen arvon.</div>
+    </details>
+  </section>
+
+  <section id="tulokset">
+    <div class="kortti tyhja">Täytä vähintään merkki, malli, teho, ensirekisteröintipäivä ja ajokilometrit.</div>
+  </section>
+</main>
+
+<footer>
+  <div class="kortti">
+    <details id="tarkkuus-osio">
+      <summary>Miten laskuri toimii ja kuinka tarkka se on?</summary>
+      <div id="tarkkuus"></div>
+    </details>
+  </div>
+  <p>Lähteet: <a href="https://vero.fi/henkiloasiakkaat/omaisuus/autovero/autoveron-maara/ajoneuvojen-sovellettuja-verotusarvoja/" target="_blank" rel="noopener">Verohallinto: taulukot sovelletuista verotusarvoista</a> ·
+    <a href="https://vero.fi/henkiloasiakkaat/omaisuus/autovero/autoveron-maara/autoveroprosentit-ajoneuvoille/" target="_blank" rel="noopener">Autoveroprosentit</a> ·
+    <a href="https://vero.fi/henkiloasiakkaat/omaisuus/autovero/autoveron-maara/" target="_blank" rel="noopener">Verohallinnon autoverolaskuri ja hintatietopalvelu</a>.
+    Arvio on suuntaa antava. Sitovan tiedon saa Verohallinnon maksullisella
+    <a href="https://vero.fi/yritykset-ja-yhteisot/yhteistyo-ja-palvelut/ennakkoratkaisu-tai-poikkeuslupa/" target="_blank" rel="noopener">ennakkoratkaisulla</a>.</p>
+</footer>
+
+<script type="module" src="js/sovellus.js"></script>
+</body>
+</html>
