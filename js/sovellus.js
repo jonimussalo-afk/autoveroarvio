@@ -1,26 +1,19 @@
 import {
-  yhdistaAineisto, arvioi, harvinaisuus, malliTasot, polttoaineryhma,
+  yhdistaAineisto, arvioiKauppiaat, harvinaisuus, malliTasot, polttoaineryhma,
   pvmMerkkijonosta, pvmLuvusta, uushintaKerroin, TASO_NIMET, TUKI_SELITE,
 } from "./malli.js";
 import { veroprosentti, wltpVastine } from "./verotaulukot.js";
+import { euro, pros, kk, pvm, esc, paatosta, muutos, yhtenaistaMerkki } from "./apu.js";
+import { merkkiAineisto, luePalautteet } from "./palaute.js";
 
 const $ = (id) => document.getElementById(id);
 let aineisto = null; // valitun merkin päätökset
 let malli = null;
 const merkkiTiedostot = new Map(); // merkki -> tiedostonimi
-const merkkiValimuisti = new Map(); // merkki -> aineisto
+const merkkiValimuisti = new Map(); // merkki -> aineisto (Verohallinnon päätökset + kauppiaiden arviot)
 let ladattuMerkki = null;
 const kosketut = new Set();
 
-
-// ---------- muotoilu ----------
-const euro = (x) => (x == null || !Number.isFinite(x) ? "–" : Math.round(x).toLocaleString("fi-FI") + " €");
-const pros = (x, d = 1) => (x == null || !Number.isFinite(x) ? "–" : x.toLocaleString("fi-FI", { minimumFractionDigits: d, maximumFractionDigits: d }) + " %");
-const kk = (ms) => { const d = new Date(ms); return `${d.getUTCMonth() + 1}/${d.getUTCFullYear()}`; };
-const pvm = (ms) => { const d = new Date(ms); return `${d.getUTCDate()}.${d.getUTCMonth() + 1}.${d.getUTCFullYear()}`; };
-const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-const paatosta = (n) => `${n.toLocaleString("fi-FI")} ${n === 1 ? "päätös" : "päätöstä"}`;
-const muutos = (x) => { const p = (Math.exp(x) - 1) * 100; return (p >= 0 ? "+" : "−") + Math.abs(Math.round(p)) + " %"; };
 
 // Ennakkoratkaisu (Verohallinnon hinnasto ja käsittelyajat, tarkistettu 10/2026)
 const ENNAKKO = {
@@ -30,12 +23,6 @@ const ENNAKKO = {
   linkki: "https://vero.fi/yritykset-ja-yhteisot/yhteistyo-ja-palvelut/ennakkoratkaisu-tai-poikkeuslupa/",
 };
 
-const MERKKI_ALIAKSET = { MERCEDES: "MERCEDES-BENZ", "MERCEDES BENZ": "MERCEDES-BENZ", MB: "MERCEDES-BENZ", VW: "VOLKSWAGEN",
-  "ROLLS ROYCE": "ROLLS-ROYCE", "LANDROVER": "LAND ROVER", "ALFA": "ALFA ROMEO", "ASTON": "ASTON MARTIN" };
-function yhtenaistaMerkki(s) {
-  const t = String(s || "").toUpperCase().replace(/\s+/g, " ").trim();
-  return MERKKI_ALIAKSET[t] || t;
-}
 const TYHJA = yhdistaAineisto([]);
 
 // ---------- lataus ----------
@@ -62,10 +49,14 @@ async function lataa() {
 async function lataaMerkki(merkki) {
   if (merkki === ladattuMerkki) return;
   ladattuMerkki = merkki;
-  if (!merkkiTiedostot.has(merkki)) { aineisto = TYHJA; return; }
+  const omat = luePalautteet();
+  const omiaMerkille = omat.some((p) => yhtenaistaMerkki(p.auto.merkki) === merkki);
+  if (!merkkiTiedostot.has(merkki) && !omiaMerkille) { aineisto = TYHJA; return; }
   if (!merkkiValimuisti.has(merkki)) {
-    const json = await fetch("data/merkit/" + merkkiTiedostot.get(merkki)).then((r) => r.json());
-    merkkiValimuisti.set(merkki, yhdistaAineisto([json]));
+    const json = merkkiTiedostot.has(merkki)
+      ? await fetch("data/merkit/" + merkkiTiedostot.get(merkki)).then((r) => r.json()) : null;
+    // Mukaan tämän selaimen koulutustilassa annetut kauppiaan arviot
+    merkkiValimuisti.set(merkki, merkkiAineisto(json, merkki, omat));
   }
   if (ladattuMerkki === merkki) aineisto = merkkiValimuisti.get(merkki);
 }
@@ -223,7 +214,7 @@ function laske() {
     return;
   }
   kohde.tasoKartta = malliTasot(aineisto, merkki, malliNimi);
-  const tulos = arvioi(aineisto, malli, kohde, { verrokkeja: 15 });
+  const tulos = arvioiKauppiaat(aineisto, malli, kohde, { verrokkeja: 15 });
   if (tulos.virhe) { $("tulokset").innerHTML = `<div class="virhe">${esc(tulos.virhe)}</div>`; return; }
   const hv = harvinaisuus(aineisto, kohde);
 
@@ -254,7 +245,7 @@ function piirra({ kohde, tulos, hv, prosentti, prosPeruste, alustava, vp, oma })
     erittain: (lahella === 0 ? "Aineistossa ei ole päätöksiä samasta mallista lähes samalla teholla. "
       : `Lähes samanlaisia päätöksiä on vain ${lahella}. `) +
       `Tällaisissa autoissa laskurista on eniten hyötyä, mutta epävarmuus on suurempi: katso vaihteluväli ja verrokit tarkasti.`,
-  }[hv.luokka];
+  }[hv.luokka] + (hv.kauppias ? ` Lisäksi kauppiailta on ${hv.kauppias} ${hv.kauppias === 1 ? "arvio" : "arviota"} lähes samanlaisista autoista.` : "");
 
   const osuusJarjestys = ["malli", "sarja", "merkki", "kaikki"];
   const varit = { malli: "var(--malli)", sarja: "var(--sarja)", merkki: "var(--merkki)", kaikki: "var(--kaikki)" };
@@ -328,6 +319,15 @@ function piirra({ kohde, tulos, hv, prosentti, prosPeruste, alustava, vp, oma })
       : `Mallin hintatasossa on porras ensirekisteröinnin mukaan (noin ${rajat}), esimerkiksi sukupolven tai
         mallipäivityksen vaihdos. Verrokit, jotka on rekisteröity eri puolella porrasta kuin tämä auto, painavat vähemmän.`);
   }
+  const kp = tulos.kauppias;
+  if (kp && kp.lkm > 0) {
+    lisaPerustelut.push(kp.korjaus
+      ? `Kauppiaiden arviot ${kp.lkm} lähes samanlaisesta autosta (koulutustila) korjasivat laskurin omaa arviota
+        ${muutos(kp.korjaus)}; laskurin oma arvio oli ${euro(tulos.laskurinOmaArvio)}. Korjaus on varovainen, koska yksittäinen
+        arvio voi osua ohi.`
+      : `Lähes samanlaisista autoista on ${kp.lkm} kauppiaan arviota, mutta tästä mallista on runsaasti Verohallinnon
+        päätöksiä, joten ne eivät muuta arviota.`);
+  }
   const lisaPerusteluHtml = lisaPerustelut.map((t) => `<p class="pieni" style="margin:6px 0 0">${t}</p>`).join("");
 
   // Uushintamenetelmä
@@ -349,7 +349,9 @@ function piirra({ kohde, tulos, hv, prosentti, prosPeruste, alustava, vp, oma })
   const rivit = tulos.verrokit.map((v) => {
     const maxPaino = tulos.verrokit[0]?.paino || 1;
     return `<tr>
-      <td><span class="merkki-taso t-${v.taso}">${TASO_NIMET[v.taso]}</span></td>
+      <td>${v.lahde === 1
+        ? `<span class="merkki-taso t-kauppias" title="Kauppiaan arvio autoverosta muutettuna verotusarvoksi (${esc(TASO_NIMET[v.taso]).toLowerCase()})">Kauppiaan arvio</span>`
+        : `<span class="merkki-taso t-${v.taso}">${TASO_NIMET[v.taso]}</span>`}</td>
       <td>${esc(v.merkki)} ${esc(v.malli)}${v.eriSukupolvi ? `<span class="sp-merkki" title="Rekisteröity mallin hintatason portaan toisella puolella">eri sukupolvi</span>` : ""}</td>
       <td class="oikea">${Math.round(v.kw)}</td>
       <td>${esc(v.kayttovoima)}</td>
@@ -409,7 +411,20 @@ function piirra({ kohde, tulos, hv, prosentti, prosPeruste, alustava, vp, oma })
         ajokilometreihin, tehoon ja verotushetkeen. Arvio ei huomioi varusteita eikä kuntoa, koska niitä ei ole aineistossa.</p>`
         : `<p class="pieni">Merkiltä ei löytynyt verrokkeja. Arvio perustuu kaikkien merkkien yleiseen hintamalliin, joten se on hyvin karkea.
            Syötä vastaavan uuden auton hinta lisätietoihin.</p>`}
-    </div>`;
+    </div>
+    ${kp && kp.verrokit && kp.verrokit.length ? `<div class="kortti">
+      <h2>Kauppiaiden arviot lähes samanlaisista autoista</h2>
+      <div class="taulukko"><table>
+        <thead><tr><th>Merkki ja malli</th><th class="oikea">kW</th><th class="oikea">Ensirek.</th><th class="oikea">Ajettu</th>
+        <th class="oikea">Annettu</th><th class="oikea">Laskurin arvio</th><th class="oikea">Kauppiaan arvio</th><th class="oikea">Ero</th></tr></thead>
+        <tbody>${kp.verrokit.map((v) => `<tr><td>${esc(v.merkki)} ${esc(v.malli)}</td><td class="oikea">${Math.round(v.kw)}</td>
+          <td class="oikea">${kk(v.ensirek)}</td><td class="oikea">${Math.round(v.km).toLocaleString("fi-FI")} tkm</td>
+          <td class="oikea">${pvm(v.annettu)}</td><td class="oikea">${euro((v.laskurinArvo * v.veropros) / 100)}</td>
+          <td class="oikea">${euro((v.kauppiaanArvo * v.veropros) / 100)}</td><td class="oikea">${muutos(v.ero)}</td></tr>`).join("")}</tbody>
+      </table></div>
+      <p class="pieni">Autoverot laskettu kunkin arvion veroprosentilla. Laskuri korjaa arviotaan näiden erojen painotetulla keskiarvolla
+        sitä voimakkaammin, mitä vähemmän mallista on Verohallinnon päätöksiä. <a href="koulutus.html">Koulutustila</a></p>
+    </div>` : ""}`;
 }
 
 function naytaTarkkuus() {

@@ -14,7 +14,7 @@
 
 import { paastoVeroprosentista } from "./verotaulukot.js";
 
-export const VERSIO = "1.2.0";
+export const VERSIO = "1.3.0";
 const VUOSI_MS = 365.25 * 86400000;
 const AIKA_ALKU = Date.UTC(2020, 0, 1);
 
@@ -76,6 +76,19 @@ export const ASETUKSET = {
   // Ensirekisteröinnin läheisyys verrokin painona (0 = pois; kokeiltu, ei parantanut tarkkuutta)
   ensirekHajonta: { malli: 0, sarja: 0, merkki: 0 },
   ensirekLattia: 0.05,
+  // Kauppiaiden arviot (koulutustila). Laskuri vertaa kauppiaan arviota omaan arvioonsa samasta autosta ja
+  // korjaa lähes samanlaisten autojen arvioita erotuksen mukaan (jäännöskorjaus). Korjaus kutistetaan kohti
+  // nollaa kertoimella k0 × tukiKerroin[tukitaso]: yleisissä malleissa (tuki A) laskuri on jo tarkka, joten
+  // kauppiaan arvio ei korjaa niitä lainkaan; harvinaisissa (C–E) korjaus on voimakkain. Läheisyys: teho (log),
+  // ikä (vuotta), ajokilometrit (log) ja arvion tuoreus. Kun kauppiaiden arvioita on verrattu toteutuneisiin
+  // päätöksiin, kuukausiajo säätää kutistusta osuvuuden mukaan (malli.kauppiasKutistus).
+  // verrokkina: käytetäänkö arviota myös tavallisena verrokkina (kokeiltu, ei parantanut tarkkuutta).
+  kauppias: {
+    korjaus: true, k0: 1.5, tukiKerroin: { A: Infinity, B: 4, C: 1.5, D: 1, E: 1 },
+    puolitus: 4, // käytetään, jos tukiKerroin = null: kutistus kasvaa lähellä olevien päätösten määrän mukaan
+    sarjaPaino: 0.3, kwHajonta: 0.05, ikaHajonta: 1.5, kmHajonta: 0.7, puoliintumisKk: 12,
+    verrokkina: false, paino: 1,
+  },
   // Kohta 2: mallisukupolvet. Mallin hintatasossa (ikä, km ja teho huomioiden) näkyvät portaat
   // ensirekisteröintipäivän mukaan tulkitaan sukupolven tai mallipäivityksen vaihdoksiksi.
   sukupolvi: {
@@ -234,6 +247,8 @@ export function yhdistaAineisto(tiedostot) {
     ika: new Float64Array(n), km: new Float64Array(n), arvo: new Float64Array(n), y: new Float64Array(n),
     t: new Float64Array(n), kk: new Int32Array(n), veropros: new Float32Array(n),
     cm3: new Float32Array(n), lcm3: new Float64Array(n), ovet: new Int8Array(n), paasto: new Float32Array(n),
+    // lähde: 0 = Verohallinnon päätös, 1 = kauppiaan arvio (koulutustila)
+    lahde: new Uint8Array(n), palauteId: new Float64Array(n),
   };
   let i = 0;
   let viimeisin = 0;
@@ -268,7 +283,9 @@ export function yhdistaAineisto(tiedostot) {
       A.lcm3[i] = cm3 > 0 ? Math.log(cm3) : NaN;
       A.ovet[i] = S.ovet ? S.ovet[r] || 0 : 0;
       A.paasto[i] = A.ryhma[i] === 0 ? NaN : paastoVeroprosentista(A.veropros[i], S.ensirek[r]);
-      if (S.paatos[r] > viimeisin) viimeisin = S.paatos[r];
+      A.lahde[i] = S.lahde && S.lahde[r] ? 1 : 0;
+      A.palauteId[i] = S.palauteId ? S.palauteId[r] || 0 : 0;
+      if (!A.lahde[i] && S.paatos[r] > viimeisin) viimeisin = S.paatos[r];
       i++;
     }
   }
@@ -282,12 +299,17 @@ function rakennaHakemistot(aineisto) {
   const ryhmaRivit = [[], [], []];
   const malliLkm = new Map();
   const merkinMallit = new Map();
+  let kauppiasRivit = 0;
   for (let r = 0; r < n; r++) {
     const k = A.merkki[r] * 3 + A.ryhma[r];
     if (!merkkiRyhma.has(k)) merkkiRyhma.set(k, []);
     merkkiRyhma.get(k).push(r);
-    ryhmaRivit[A.ryhma[r]].push(r);
-    malliLkm.set(A.malli[r], (malliLkm.get(A.malli[r]) || 0) + 1);
+    // Kauppiaiden arviot ovat vain verrokkeja: mallin opetus ja päätösmäärät perustuvat Verohallinnon päätöksiin
+    if (A.lahde && A.lahde[r]) { kauppiasRivit++; if (!malliLkm.has(A.malli[r])) malliLkm.set(A.malli[r], 0); }
+    else {
+      ryhmaRivit[A.ryhma[r]].push(r);
+      malliLkm.set(A.malli[r], (malliLkm.get(A.malli[r]) || 0) + 1);
+    }
     if (!merkinMallit.has(A.merkki[r])) merkinMallit.set(A.merkki[r], new Set());
     merkinMallit.get(A.merkki[r]).add(A.malli[r]);
   }
@@ -295,7 +317,7 @@ function rakennaHakemistot(aineisto) {
     const [merkki, nimi] = avain.split("|");
     return { nimi, sanat: malliSanat(nimi), sarja: mallisarja(merkki, nimi) };
   });
-  return { ...aineisto, merkkiRyhma, ryhmaRivit, malliLkm, merkinMallit, malliTiedot };
+  return { ...aineisto, merkkiRyhma, ryhmaRivit, malliLkm, merkinMallit, malliTiedot, kauppiasRivit };
 }
 
 /** Uusi aineisto, jossa on vain ehdon täyttävät rivit (sanastot ovat yhteiset alkuperäisen kanssa). */
@@ -310,6 +332,7 @@ export function osajoukko(aineisto, ehto) {
   }
   let viimeisin = 0;
   for (let i = 0; i < valitut.length; i++) {
+    if (A.lahde && A.lahde[i]) continue;
     const d = new Date(A.paatos[i]);
     const luku = d.getUTCFullYear() * 10000 + (d.getUTCMonth() + 1) * 100 + d.getUTCDate();
     if (luku > viimeisin) viimeisin = luku;
@@ -343,7 +366,8 @@ export function malliTasot(aineisto, merkki, malli) {
   const mallit = [...aineisto.merkinMallit.get(merkkiI)];
   // Jos täsmälleen sama nimi löytyy aineistosta, vain se on "sama malli" ja nimeltään lähellä olevat
   // ovat samaa sarjaa. Jos ei löydy, nimeltään lähimmät (esim. "911" haulle "911 GT3") ovat "sama malli".
-  const tasmaava = mallit.some((mi) => aineisto.malliTiedot[mi].nimi === nimi);
+  // (vain mallit, joista on Verohallinnon päätöksiä: kauppiaan arvion uusi mallinimi ei muuta muiden tasoja)
+  const tasmaava = mallit.some((mi) => aineisto.malliTiedot[mi].nimi === nimi && (aineisto.malliLkm.get(mi) || 0) > 0);
   for (const mi of mallit) {
     const t = aineisto.malliTiedot[mi];
     if (t.nimi === nimi) { kartta.set(mi, "malli"); continue; }
@@ -673,23 +697,25 @@ export function harvinaisuus(aineisto, kohde) {
   const merkkiI = hakemisto.merkki.get(kohde.merkki);
   const tasoKartta = kohde.tasoKartta || malliTasot(aineisto, kohde.merkki, kohde.malli);
   const lkw = Math.log(kohde.kw);
-  let malli = 0, sarja = 0, merkki = 0;
+  let malli = 0, sarja = 0, merkki = 0, kauppias = 0;
   const rivit = merkkiI === undefined ? [] : aineisto.merkkiRyhma.get(merkkiI * 3 + gi) || [];
   for (const r of rivit) {
     const kori = aineisto.sanasto.korimalli[A.korimalli[r]];
     if (kohde.korimalli && kori !== kohde.korimalli && (ERIKOISKORIT.has(kori) || ERIKOISKORIT.has(kohde.korimalli))) continue;
-    merkki++;
-    if (Math.abs(A.lkw[r] - lkw) > 0.1) continue;
     const taso = tasoKartta.get(A.malli[r]);
+    const lahella = Math.abs(A.lkw[r] - lkw) <= 0.1 && (taso === "malli" || taso === "sarja");
+    if (A.lahde[r]) { if (lahella) kauppias++; continue; } // kauppiaiden arviot eivät ole päätöksiä
+    merkki++;
+    if (!lahella) continue;
     if (taso === "malli") malli++;
-    if (taso === "malli" || taso === "sarja") sarja++;
+    sarja++;
   }
   let luokka, selite;
   const lahella = Math.max(malli, sarja);
   if (lahella >= 30) { luokka = "yleinen"; selite = "Yleinen malli"; }
   else if (lahella >= 5) { luokka = "harvinainen"; selite = "Harvinainen"; }
   else { luokka = "erittain"; selite = "Erittäin harvinainen"; }
-  return { luokka, selite, malli, sarja, merkki };
+  return { luokka, selite, malli, sarja, merkki, kauppias };
 }
 
 /**
@@ -697,7 +723,7 @@ export function harvinaisuus(aineisto, kohde) {
  * kohde: { merkki, malli, kw, ryhma, ensirek(ms), verotus(ms), km (tuhansina), korimalli?, vetotapa? }
  * Valinnainen poissulje: rivin indeksi, jota ei käytetä (tarkkuustestiä varten).
  */
-export function arvioi(aineisto, malli, kohde, { poissulje = -1, verrokkeja = 15 } = {}) {
+export function arvioi(aineisto, malli, kohde, { poissulje = -1, verrokkeja = 15, palauteSuodin = null } = {}) {
   const { A, hakemisto, sanasto } = aineisto;
   const gi = RYHMAT.indexOf(kohde.ryhma);
   const K = malli.kertoimet[kohde.ryhma];
@@ -714,7 +740,7 @@ export function arvioi(aineisto, malli, kohde, { poissulje = -1, verrokkeja = 15
   // erikoisversio)? Silloin käytetään omaa harhakorjausta ja leveämpää väliä (ks. valitseKalibrointi).
   let minM = Infinity, maxM = -Infinity;
   for (const r of rivit) {
-    if (r === poissulje || tasoKartta.get(A.malli[r]) !== "malli") continue;
+    if (r === poissulje || A.lahde[r] || tasoKartta.get(A.malli[r]) !== "malli") continue;
     if (A.lkw[r] < minM) minM = A.lkw[r];
     if (A.lkw[r] > maxM) maxM = A.lkw[r];
   }
@@ -736,17 +762,18 @@ export function arvioi(aineisto, malli, kohde, { poissulje = -1, verrokkeja = 15
   const fMerkki = pistetulo(K.merkki.beta, xMerkki, pB);
 
   const sA = Math.max(ASETUKSET.ikaHajontaMin, ASETUKSET.ikaHajontaOsuus * ika);
-  const tasot = {
-    malli: { sw: 0, sw2: 0, swy: 0, swyy: 0, lkm: 0 },
-    sarja: { sw: 0, sw2: 0, swy: 0, swyy: 0, lkm: 0 },
-    merkki: { sw: 0, sw2: 0, swy: 0, swyy: 0, lkm: 0 },
-  };
+  // sw* = kaikki verrokit, swR/sw2R = vain Verohallinnon päätökset (tukitaso), swK/lkmK = kauppiaiden arviot
+  const uusiTaso = () => ({ sw: 0, sw2: 0, swy: 0, swyy: 0, lkm: 0, swR: 0, sw2R: 0, swK: 0, lkmK: 0 });
+  const tasot = { malli: uusiTaso(), sarja: uusiTaso(), merkki: uusiTaso() };
+  const kauppiasPaino = Number.isFinite(malli.kauppiasPaino) ? malli.kauppiasPaino : ASETUKSET.kauppias.paino;
   const ehdokkaat = [];
   const x = new Float64Array(pB + 1);
   const SP = ASETUKSET.sukupolvi.kerroin < 1 || ASETUKSET.sukupolvi.siirto ? ASETUKSET.sukupolvi : null;
   const sukupolvetRyhma = malli.sukupolvet && malli.sukupolvet[kohde.ryhma];
   for (const r of rivit) {
     if (r === poissulje) continue;
+    const onKauppias = A.lahde[r] === 1;
+    if (onKauppias && (!ASETUKSET.kauppias.verrokkina || (palauteSuodin && !palauteSuodin(A.palauteId[r])))) continue;
     const taso = tasoKartta.get(A.malli[r]) || "merkki";
     const dk = A.lkw[r] - lkw;
     const sK = ASETUKSET.tehoHajonta[taso];
@@ -808,6 +835,7 @@ export function arvioi(aineisto, malli, kohde, { poissulje = -1, verrokkeja = 15
       const a = (A.ika[r] - ika) / P.tarkkaIka, b = Math.log((A.km[r] + 5) / (kohde.km + 5)) / P.tarkkaKm;
       w *= 1 + P.tarkkaPaino * Math.exp(-0.5 * (a * a + b * b));
     }
+    if (onKauppias) w *= kauppiasPaino;
     if (w < 1e-6) continue;
     // Siirretään verrokin arvo kohdeauton ominaisuuksiin
     let siirretty;
@@ -819,20 +847,27 @@ export function arvioi(aineisto, malli, kohde, { poissulje = -1, verrokkeja = 15
       siirretty = A.y[r] - indeksiArvo(K.indeksi, A.kk[r]) + indT + fMalli - pistetulo(K.malli.beta, x, pM);
     }
     siirretty += sukupolviSiirto;
-    ehdokkaat.push({ r, taso, w, siirretty, kkSitten, eriSukupolvi });
+    ehdokkaat.push({ r, taso, w, siirretty, kkSitten, eriSukupolvi, kauppias: onKauppias });
   }
 
   // Päätösten tuoreus: jos saman mallin tuoreita, lähellä olevia päätöksiä on runsaasti, vanhat päätökset
   // painavat vähän (lyhyt puoliintumisaika). Harvinaisille autoille vanhemmatkin päätökset pidetään mukana.
   let tuoreita = 0;
-  for (const e of ehdokkaat) if (e.taso === "malli" && e.kkSitten <= 12 && e.w > 0.3) tuoreita++;
+  for (const e of ehdokkaat) if (e.taso === "malli" && !e.kauppias && e.kkSitten <= 12 && e.w > 0.3) tuoreita++;
   const puoliintuminen = tuoreita >= ASETUKSET.tuoreRaja ? ASETUKSET.puoliintumisKkRunsas : ASETUKSET.puoliintumisKk;
+  for (const e of ehdokkaat) e.w *= Math.pow(0.5, e.kkSitten / puoliintuminen);
+  // Kauppiaiden arviot painavat sitä vähemmän, mitä enemmän lähellä olevia Verohallinnon päätöksiä on
+  let swL = 0, sw2L = 0;
+  for (const e of ehdokkaat) if (!e.kauppias && e.taso !== "merkki") { swL += e.w; sw2L += e.w * e.w; }
+  const essLahella = sw2L > 0 ? (swL * swL) / sw2L : 0;
+  const kauppiasKerroin = 1 / (1 + essLahella / ASETUKSET.kauppias.puolitus);
   const jaljella = [];
   for (const e of ehdokkaat) {
-    e.w *= Math.pow(0.5, e.kkSitten / puoliintuminen);
+    if (e.kauppias) e.w *= kauppiasKerroin;
     if (e.w < 1e-4) continue;
     const T = tasot[e.taso];
     T.sw += e.w; T.sw2 += e.w * e.w; T.swy += e.w * e.siirretty; T.swyy += e.w * e.siirretty * e.siirretty; T.lkm++;
+    if (e.kauppias) { T.swK += e.w; T.lkmK++; } else { T.swR += e.w; T.sw2R += e.w * e.w; }
     jaljella.push(e);
   }
   ehdokkaat.length = 0;
@@ -864,14 +899,24 @@ export function arvioi(aineisto, malli, kohde, { poissulje = -1, verrokkeja = 15
     const osuus = ess / (ess + k);
     for (const t in osuudet) osuudet[t] *= 1 - osuus;
     osuudet[taso] = osuus;
-    tulosTasot[taso] = { arvio: ka, ess, lkm: T.lkm };
+    // Tukitaso ja vaihteluväli lasketaan vain Verohallinnon päätöksistä: kauppiaan arvio siirtää arviota,
+    // mutta ei kavenna väliä ennen kuin arvioiden osuvuus on todettu toteutuneilla päätöksillä.
+    const essTuki = T.swR > 0 ? (T.swR * T.swR) / T.sw2R : 0;
+    tulosTasot[taso] = { arvio: ka, ess, essTuki, lkm: T.lkm - T.lkmK, kauppias: T.lkmK };
     ennakko = uusi;
     ennakkoPaino = ess + ennakkoPaino;
   }
   const mu = ennakko;
 
   // Tukiluokka kalibrointia varten
-  const essM = tulosTasot.malli.ess, essS = tulosTasot.sarja.ess, essB = tulosTasot.merkki.ess;
+  const essM = tulosTasot.malli.essTuki, essS = tulosTasot.sarja.essTuki, essB = tulosTasot.merkki.essTuki;
+  // Kauppiaiden arvioiden osuus lopullisesta arviosta (tasojen osuuksien ja painojen mukaan)
+  let kauppiasOsuus = 0, kauppiasLkm = 0;
+  for (const taso of ["merkki", "sarja", "malli"]) {
+    const T = tasot[taso];
+    if (T.sw > 0) kauppiasOsuus += (osuudet[taso] || 0) * (T.swK / T.sw);
+    kauppiasLkm += T.lkmK;
+  }
   let tuki;
   if (essM >= 8) tuki = "A";
   else if (essM >= 2) tuki = "B";
@@ -881,7 +926,8 @@ export function arvioi(aineisto, malli, kohde, { poissulje = -1, verrokkeja = 15
 
   const kal = valitseKalibrointi(malli.kalibrointi, tuki, kohde.ryhma, ika, tehoUlkona);
   const q = kal ? kal.kvantiilit : OLETUSKVANTIILIT[tuki];
-  const keskikorjaus = kal ? kal.mediaani : 0;
+  // Laskurin oma harhakorjaus koskee vain laskurin omaa osuutta arviosta, ei kauppiaiden arvioita
+  const keskikorjaus = (kal ? kal.mediaani : 0) * (1 - kauppiasOsuus);
   const keski = mu + keskikorjaus; // virhe = toteutunut − arvio, joten mediaanivirhe lisätään
 
   ehdokkaat.sort((a, b) => b.w - a.w);
@@ -900,6 +946,8 @@ export function arvioi(aineisto, malli, kohde, { poissulje = -1, verrokkeja = 15
     siirretty: Math.exp(e.siirretty),
     paino: e.w,
     eriSukupolvi: e.eriSukupolvi,
+    lahde: A.lahde[e.r],
+    palauteId: A.palauteId[e.r],
   }));
   // Kohdemallin tunnistetut sukupolvirajat (näytetään käyttäjälle)
   let sukupolviRajat = null;
@@ -922,6 +970,8 @@ export function arvioi(aineisto, malli, kohde, { poissulje = -1, verrokkeja = 15
     logArvio: keski,
     tuki,
     tehoUlkona,
+    kauppias: { lkm: kauppiasLkm, osuus: kauppiasOsuus, paino: kauppiasPaino },
+    essLahella,
     tehoAlue: Number.isFinite(minM) ? [Math.round(Math.exp(minM)), Math.round(Math.exp(maxM))] : null,
     sukupolviRajat: sukupolviRajat ? sukupolviRajat.rajat : null,
     tasot: tulosTasot,
@@ -930,6 +980,82 @@ export function arvioi(aineisto, malli, kohde, { poissulje = -1, verrokkeja = 15
     verrokit: naytettavat,
     verrokkeja: ehdokkaat.length,
     verrokkienVeroprosentit: vp.length ? { min: vp[0], mediaani: vp[Math.floor(vp.length / 2)], max: vp[vp.length - 1], n: vp.length } : null,
+  };
+}
+
+const kauppiasArvioValimuisti = new WeakMap(); // aineisto -> Map(rivi -> laskurin log-arvio kauppiaan autosta)
+
+/**
+ * Kauppiaiden arvioihin perustuva korjaus (koulutustila). Jokaisesta kauppiaan arviosta lasketaan jäännös:
+ * kauppiaan arvio − laskurin oma arvio samasta autosta arvion antopäivänä (log). Kohteen korjaus on lähes
+ * samanlaisten autojen jäännösten painotettu keskiarvo, kutistettuna kohti nollaa sitä voimakkaammin, mitä
+ * enemmän kohteella on lähellä olevia Verohallinnon päätöksiä (tulos.essLahella).
+ */
+export function kauppiasKorjaus(aineisto, malli, kohde, tulos, { palauteSuodin = null } = {}) {
+  const KA = ASETUKSET.kauppias;
+  const tyhja = { korjaus: 0, lkm: 0, osuus: 0, verrokit: [] };
+  if (!KA.korjaus || !aineisto.kauppiasRivit || !tulos || tulos.virhe) return tyhja;
+  const { A, hakemisto, sanasto } = aineisto;
+  const gi = RYHMAT.indexOf(kohde.ryhma);
+  const bi = hakemisto.merkki.get(kohde.merkki);
+  if (bi === undefined || gi < 0) return tyhja;
+  const tasoKartta = kohde.tasoKartta || malliTasot(aineisto, kohde.merkki, kohde.malli);
+  const ika = Math.max(0, (kohde.verotus - kohde.ensirek) / VUOSI_MS);
+  const lkw = Math.log(kohde.kw);
+  let muisti = kauppiasArvioValimuisti.get(aineisto);
+  if (!muisti) { muisti = new Map(); kauppiasArvioValimuisti.set(aineisto, muisti); }
+  let sw = 0, swe = 0;
+  const lista = [];
+  for (const r of aineisto.merkkiRyhma.get(bi * 3 + gi) || []) {
+    if (!A.lahde[r]) continue;
+    if (palauteSuodin && !palauteSuodin(A.palauteId[r])) continue;
+    const taso = tasoKartta.get(A.malli[r]);
+    const tasoPaino = taso === "malli" ? 1 : taso === "sarja" ? KA.sarjaPaino : 0;
+    if (!tasoPaino) continue;
+    const dk = (A.lkw[r] - lkw) / KA.kwHajonta;
+    const di = (A.ika[r] - ika) / KA.ikaHajonta;
+    const dm = Math.log((A.km[r] + 5) / (kohde.km + 5)) / KA.kmHajonta;
+    const kkSitten = Math.abs(kohde.verotus - A.paatos[r]) / (VUOSI_MS / 12);
+    const w = tasoPaino * Math.exp(-0.5 * (dk * dk + di * di + dm * dm)) * Math.pow(0.5, kkSitten / KA.puoliintumisKk);
+    if (w < 0.01) continue;
+    let m = muisti.get(r);
+    if (m === undefined) {
+      const t = arvioi(aineisto, malli, rivinKohde(aineisto, r), { verrokkeja: 0 });
+      m = t.virhe ? NaN : t.logArvio;
+      muisti.set(r, m);
+    }
+    if (!Number.isFinite(m)) continue;
+    const jaannos = A.y[r] - m;
+    sw += w; swe += w * jaannos;
+    lista.push({ r, paino: w, jaannos, laskuri: m });
+  }
+  if (!sw) return tyhja;
+  const harvinaisuusKerroin = KA.tukiKerroin ? (KA.tukiKerroin[tulos.tuki] ?? 1) : 1 + (tulos.essLahella || 0) / KA.puolitus;
+  const kutistus = KA.k0 * harvinaisuusKerroin * (Number.isFinite(malli.kauppiasKutistus) ? malli.kauppiasKutistus : 1);
+  if (!Number.isFinite(kutistus)) return { ...tyhja, lkm: lista.length };
+  lista.sort((a, b) => b.paino - a.paino);
+  return {
+    korjaus: swe / (sw + kutistus),
+    lkm: lista.length,
+    osuus: sw / (sw + kutistus), // kuinka suuren osan kauppiaiden keskimääräisestä erosta korjaus ottaa mukaan
+    verrokit: lista.slice(0, 5).map((e) => ({
+      palauteId: A.palauteId[e.r], merkki: sanasto.merkki[A.merkki[e.r]], malli: sanasto.malli[A.malli[e.r]].split("|")[1],
+      kw: A.kw[e.r], ensirek: A.ensirek[e.r], km: A.km[e.r], annettu: A.paatos[e.r], veropros: A.veropros[e.r],
+      kauppiaanArvo: A.arvo[e.r], laskurinArvo: Math.exp(e.laskuri), ero: e.jaannos, paino: e.paino,
+    })),
+  };
+}
+
+/** Laskurin arvio, johon on lisätty kauppiaiden arvioihin perustuva korjaus. */
+export function arvioiKauppiaat(aineisto, malli, kohde, valinnat = {}) {
+  const t = arvioi(aineisto, malli, kohde, valinnat);
+  if (t.virhe) return t;
+  const kk = kauppiasKorjaus(aineisto, malli, kohde, t, valinnat);
+  if (!kk.korjaus) return { ...t, kauppias: kk, laskurinOmaArvio: t.arvio };
+  const f = Math.exp(kk.korjaus);
+  return {
+    ...t, arvio: t.arvio * f, ala80: t.ala80 * f, yla80: t.yla80 * f, ala50: t.ala50 * f, yla50: t.yla50 * f,
+    logArvio: t.logArvio + kk.korjaus, laskurinOmaArvio: t.arvio, kauppias: kk,
   };
 }
 
@@ -1080,6 +1206,7 @@ export function kalibroi(aineisto, malli, { yleisiaOtos = 4000, siemen = 7, maxT
   const v = Math.floor(aineisto.viimeisinPaatos / 10000), kk = Math.floor(aineisto.viimeisinPaatos / 100) % 100;
   const testiAlku = Date.UTC(v, kk - 1 - ASETUKSET.kalibrointiKk, 1);
   for (let r = 0; r < aineisto.n; r++) {
+    if (A.lahde[r]) continue; // kauppiaiden arvioita ei testata
     if (A.arvo[r] < 500) continue; // hyvin vanhat autot, joiden arvo on lähes nolla
     if (A.paatos[r] < testiAlku) continue;
     const lkm = aineisto.malliLkm.get(A.malli[r]);
@@ -1173,7 +1300,7 @@ export function ajallinenTesti(aineisto, raja, { kalibroiOpetus = true, historia
   const luokat = { yleinen: [], harvinainen: [], erittain: [] };
   const valimuisti = new Map();
   for (let r = 0; r < aineisto.n; r++) {
-    if (A.paatos[r] < raja || A.arvo[r] < 500) continue;
+    if (A.paatos[r] < raja || A.arvo[r] < 500 || A.lahde[r]) continue;
     const kohde = rivinKohde(aineisto, r);
     const avain = kohde.merkki + "|" + kohde.malli;
     if (!valimuisti.has(avain)) valimuisti.set(avain, malliTasot(opetus, kohde.merkki, kohde.malli));
