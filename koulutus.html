@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Koulutustila – tuontiauton autoveroarvio</title>
+  <meta name="description" content="Kauppiaan koulutustila: anna oma arviosi autoverosta ja opeta laskuria harvinaisissa autoissa.">
+  <style>
+    :root {
+      --tausta: #f4f5f7; --kortti: #fff; --teksti: #1d2433; --heikko: #5b6475; --raja: #dde1e8;
+      --paa: #1f4fd1; --paa-vaalea: #e8eefc; --ok: #13795b; --ok-vaalea: #e3f4ee; --varoitus: #9a5b00;
+      --varoitus-vaalea: #fff3df; --vaara: #b42318; --vaara-vaalea: #fde8e7; --kauppias: #b45309;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--tausta);
+      color: var(--teksti); font-size: 15px; line-height: 1.45; }
+    header { background: #111a2e; color: #fff; padding: 18px 24px; }
+    header .sisalto { max-width: 760px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 10px 24px;
+      align-items: center; justify-content: space-between; }
+    h1 { font-size: 21px; margin: 0; letter-spacing: -0.2px; }
+    header p { margin: 3px 0 0; color: #b8c2d8; font-size: 13.5px; }
+    header a { color: #fff; font-size: 13px; text-decoration: none; border: 1px solid rgba(255,255,255,.35);
+      border-radius: 999px; padding: 4px 12px; }
+    header a:hover { background: rgba(255,255,255,.12); }
+    main { max-width: 760px; margin: 22px auto 40px; padding: 0 20px; }
+    .kortti { background: var(--kortti); border: 1px solid var(--raja); border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+    .kortti h2 { font-size: 15px; margin: 0 0 12px; }
+    .ohje { font-size: 14px; }
+    .ohje p { margin: 0; }
+    label { display: block; font-size: 12.5px; font-weight: 600; color: var(--heikko); margin: 10px 0 4px; }
+    input, select { width: 100%; padding: 8px 10px; border: 1px solid #c6ccd8; border-radius: 8px; font-size: 14.5px;
+      background: #fff; color: var(--teksti); font-family: inherit; }
+    input:focus, select:focus { outline: 2px solid var(--paa-vaalea); border-color: var(--paa); }
+    .rivi { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .rivi3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+    @media (max-width: 560px) { .rivi, .rivi3 { grid-template-columns: 1fr; } }
+    .vihje, .pieni { font-size: 12.5px; color: var(--heikko); }
+    .vihje { margin-top: 4px; }
+    .napit { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .napit button { border: 1px solid #c6ccd8; background: #f7f8fa; border-radius: 999px; padding: 3px 10px; font-size: 12px;
+      cursor: pointer; color: var(--teksti); }
+    .napit button:hover { background: var(--paa-vaalea); border-color: var(--paa); }
+    details { margin-top: 12px; }
+    details summary { cursor: pointer; font-weight: 600; font-size: 13.5px; color: var(--heikko); }
+    .iso { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 560px) { .iso { grid-template-columns: 1fr; } }
+    .luku { border: 1px solid var(--raja); border-radius: 12px; padding: 12px 14px; }
+    .luku.paa { background: var(--paa); color: #fff; border-color: var(--paa); }
+    .luku .otsake { font-size: 12px; text-transform: uppercase; letter-spacing: .4px; opacity: .8; font-weight: 600; }
+    .luku .arvo { font-size: 26px; font-weight: 750; margin-top: 2px; letter-spacing: -0.5px; }
+    .luku .vali { font-size: 13px; margin-top: 4px; opacity: .9; }
+    .merkki { border-radius: 10px; padding: 10px 12px; margin-top: 12px; font-size: 13.5px; border: 1px solid; }
+    .m-suuri { background: var(--varoitus-vaalea); border-color: #f1cf95; }
+    .m-kohtalainen { background: var(--paa-vaalea); border-color: #b9cbf6; }
+    .m-pieni, .m-ei { background: var(--ok-vaalea); border-color: #a8dcc8; }
+    .ensisijainen { background: var(--kauppias); color: #fff; border: none; border-radius: 8px; padding: 10px 18px;
+      font-size: 15px; font-weight: 650; cursor: pointer; margin-top: 12px; }
+    .ensisijainen:disabled { opacity: .5; cursor: default; }
+    .toissijainen { background: #fff; color: var(--teksti); border: 1px solid #c6ccd8; border-radius: 8px; padding: 7px 12px;
+      font-size: 13.5px; cursor: pointer; }
+    .toissijainen:hover { border-color: var(--paa); background: var(--paa-vaalea); }
+    .napisto { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; align-items: center; }
+    .ok { background: var(--ok-vaalea); border: 1px solid #a8dcc8; color: #0b4d3a; border-radius: 8px; padding: 10px 12px; margin-top: 12px; font-size: 14px; }
+    .huomio { background: var(--varoitus-vaalea); border: 1px solid #f1cf95; color: #5c3b00; border-radius: 8px; padding: 8px 10px; font-size: 13px; margin-top: 10px; }
+    .virhe { background: var(--vaara-vaalea); border: 1px solid #f3b8b3; color: var(--vaara); border-radius: 8px; padding: 10px 12px; margin-top: 10px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .3px; color: var(--heikko);
+      border-bottom: 1px solid var(--raja); padding: 6px; white-space: nowrap; }
+    td { border-bottom: 1px solid #eef0f4; padding: 6px; vertical-align: top; }
+    td.oikea, th.oikea { text-align: right; white-space: nowrap; }
+    .taulukko { overflow-x: auto; }
+    .poista { background: none; border: none; color: var(--vaara); cursor: pointer; font-size: 12.5px; padding: 0; }
+    .sina { color: var(--kauppias); font-weight: 650; }
+    .tyhja { color: var(--heikko); text-align: center; padding: 14px; }
+    a { color: var(--paa); }
+  </style>
+</head>
+<body>
+<header>
+  <div class="sisalto">
+    <div>
+      <h1>Koulutustila</h1>
+      <p>Opeta laskuria omilla arvioillasi</p>
+    </div>
+    <a href="./">← Laskuriin</a>
+  </div>
+</header>
+
+<main>
+  <div class="kortti ohje">
+    <p>Syötä auto ja katso laskurin arvio. Kerro sitten oma, kokemukseesi perustuva arviosi autoverosta.
+      Laskuri vertaa arviotasi omaansa ja korjaa sen perusteella lähes samanlaisten autojen arvioita – eniten
+      harvinaisissa autoissa, joista Verohallinnon päätöksiä on vähän. Yleisiin malleihin arviosi ei vaikuta,
+      koska niistä laskurilla on jo runsaasti päätöksiä.</p>
+    <p class="pieni" id="tallennusTila" style="margin-top:8px"></p>
+  </div>
+
+  <form class="kortti" id="lomake" autocomplete="off" onsubmit="return false">
+    <h2>1. Auto</h2>
+    <div class="rivi">
+      <div>
+        <label for="merkki">Merkki</label>
+        <input id="merkki" list="merkit" placeholder="esim. BMW">
+        <datalist id="merkit"></datalist>
+      </div>
+      <div>
+        <label for="malli">Malli</label>
+        <input id="malli" list="mallit" placeholder="esim. M550D">
+        <datalist id="mallit"></datalist>
+      </div>
+    </div>
+    <div class="rivi">
+      <div>
+        <label for="kw">Teho (kW)</label>
+        <input id="kw" inputmode="numeric" placeholder="esim. 294">
+      </div>
+      <div>
+        <label for="kayttovoima">Käyttövoima</label>
+        <select id="kayttovoima"></select>
+      </div>
+    </div>
+    <div class="napit" id="tehot"></div>
+    <div class="rivi">
+      <div>
+        <label for="ensirek">Ensirekisteröintipäivä</label>
+        <input id="ensirek" type="date">
+      </div>
+      <div>
+        <label for="km">Ajokilometrit</label>
+        <input id="km" inputmode="numeric" placeholder="esim. 120000">
+      </div>
+    </div>
+    <div class="rivi">
+      <div>
+        <label for="wltp">CO2, WLTP (g/km)</label>
+        <input id="wltp" inputmode="numeric" placeholder="esim. 199">
+      </div>
+      <div>
+        <label for="nedc">CO2, NEDC (g/km)</label>
+        <input id="nedc" inputmode="numeric" placeholder="esim. 166">
+      </div>
+    </div>
+    <p class="vihje">Päästö tarvitaan, jotta arviosi autoverosta voidaan muuttaa verotusarvoksi.</p>
+    <details>
+      <summary>Lisätiedot</summary>
+      <div class="rivi3">
+        <div>
+          <label for="korimalli">Korimalli</label>
+          <select id="korimalli"></select>
+        </div>
+        <div>
+          <label for="vetotapa">Vetotapa</label>
+          <select id="vetotapa"></select>
+        </div>
+        <div>
+          <label for="vaihteisto">Vaihteisto</label>
+          <select id="vaihteisto">
+            <option value="">Ei tiedossa</option><option value="AUT">Automaatti</option><option value="MAN">Käsivalinta</option>
+          </select>
+        </div>
+      </div>
+      <div class="rivi3">
+        <div>
+          <label for="cm3">Iskutilavuus (cm³)</label>
+          <input id="cm3" inputmode="numeric">
+        </div>
+        <div>
+          <label for="ovet">Ovet</label>
+          <input id="ovet" inputmode="numeric">
+        </div>
+        <div>
+          <label for="omapros">Oma veroprosentti (%)</label>
+          <input id="omapros" inputmode="decimal">
+        </div>
+      </div>
+    </details>
+    <div id="lomakeTila" class="pieni" style="margin-top:12px"></div>
+  </form>
+
+  <section class="kortti" id="arvioKortti" hidden>
+    <h2>2. Laskurin arvio</h2>
+    <div id="laskurinArvio"></div>
+  </section>
+
+  <section class="kortti" id="omaKortti" hidden>
+    <h2>3. Oma arviosi</h2>
+    <div id="omaSisalto">
+      <div class="rivi">
+        <div>
+          <label for="omaVero">Arvioimasi autovero (€)</label>
+          <input id="omaVero" inputmode="numeric" placeholder="esim. 11000">
+        </div>
+        <div>
+          <label for="huomio">Huomio (valinnainen)</label>
+          <input id="huomio" placeholder="esim. täydet varusteet">
+        </div>
+      </div>
+      <p class="vihje">Huomio jää vain tälle koneelle. Älä kirjoita siihen henkilötietoja.</p>
+      <button type="button" class="ensisijainen" id="tallenna">Tallenna arvio</button>
+    </div>
+    <div id="tallennusTulos"></div>
+  </section>
+
+  <section class="kortti" id="listaKortti">
+    <h2>Antamasi arviot</h2>
+    <div id="yhteenveto" class="pieni"></div>
+    <div id="lista"></div>
+    <div class="napisto">
+      <button type="button" class="toissijainen" id="vie">Lataa lähettämättömät arviot</button>
+      <button type="button" class="toissijainen" id="vieKaikki">Lataa kaikki arviot</button>
+      <label class="toissijainen" style="margin:0;font-weight:400;font-size:13.5px;color:var(--teksti)">Tuo arviot tiedostosta
+        <input type="file" id="tuo" accept=".json,application/json" hidden></label>
+    </div>
+    <p class="pieni">Arviosi korjaavat laskurin tuloksia heti tässä selaimessa. Jotta ne opettavat laskuria kaikille
+      käyttäjille, lataa lähettämättömät arviot tiedostona ja lähetä tiedosto laskurin ylläpitäjälle. Tiedostossa on
+      auton tiedot ja arviot, mutta ei nimeäsi eikä huomioitasi.</p>
+    <p class="pieni" id="yhteinen"></p>
+  </section>
+</main>
+
+<script type="module" src="js/koulutus.js"></script>
+</body>
+</html>

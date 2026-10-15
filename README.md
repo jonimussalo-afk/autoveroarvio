@@ -53,7 +53,10 @@ Excel-taulukot, muuntaa ne, opettaa mallin uudelleen ja mittaa sen tarkkuuden.
    Vuosien 2008–2015 laskenta on tarkistettu aineistoa vasten: 2023–2026 tehtyjen päätösten
    veroprosenteista 11 096 / 11 097 on taulukoiden mahdollisia arvoja. Täyssähkö- ja
    vetyautot, jotka on otettu käyttöön 1.10.2021 tai myöhemmin, ovat verottomia.
-9. **Näyttää varatavan:** jos syötät vastaavan uuden auton hinnan Suomessa, laskuri näyttää myös
+9. **Oppii kauppiailta (koulutustila).** Sivulla `koulutus.html` kauppias syöttää auton, näkee laskurin
+   arvion ja antaa oman arvionsa autoverosta. Laskuri korjaa sen perusteella lähes samanlaisten
+   harvinaisten autojen arvioita (ks. *Koulutustila* alla).
+10. **Näyttää varatavan:** jos syötät vastaavan uuden auton hinnan Suomessa, laskuri näyttää myös
    arvon, jonka Verohallinto voi johtaa uuden auton hinnasta (−3 %, −2 %, −2 % ja sen jälkeen −1 %
    kuukaudessa).
 
@@ -107,6 +110,66 @@ vanhoja päätöksiä vain silloin, kun tuoreita ei ole: jos saman mallin tuorei
 kaksi, päätöksen paino puolittuu 4 kuukauden välein, muuten 18 kuukauden välein. Hyöty tasaantuu
 kolmen vuoden jälkeen, joten työnkulku pitää neljä viimeisintä vuotta (`--vuosia 4`).
 Vertailun voi toistaa komennolla `node tyokalut/vertaa_historiaa.mjs 1,2,3,4`.
+
+## Koulutustila
+
+Koulutustila (`koulutus.html`, linkki laskurin yläreunassa) on riisuttu näkymä kauppiaille:
+
+1. Kauppias syöttää auton (merkki, malli, teho, käyttövoima, ensirekisteröinti, kilometrit ja CO2).
+2. Laskuri näyttää arvionsa ja kertoo, kuinka paljon kauppiaan arvio tässä autossa vaikuttaa.
+3. Kauppias antaa oman, kokemukseensa perustuvan arvionsa autoverosta ja tallentaa sen.
+
+**Miten arvio opettaa laskuria.** Kauppiaan veroarvio muutetaan verotusarvoksi (vero / veroprosentti), ja
+laskuri vertaa sitä omaan arvioonsa samasta autosta. Kun laskuri myöhemmin arvioi lähes samanlaista autoa
+(sama malli, lähes sama teho, ikä ja kilometrit), se korjaa omaa arviotaan kauppiaiden arvioiden ja omien
+arvioidensa painotetulla erotuksella. Korjaus on sitä voimakkaampi, mitä vähemmän mallista on Verohallinnon
+päätöksiä:
+
+| Tukitaso (lähellä olevat päätökset) | Kauppiaan arvion vaikutus | Esimerkki: kauppias −20 % samasta autosta |
+|---|---|---|
+| A: runsaasti saman mallin päätöksiä | ei vaikutusta | 0 % |
+| B: muutama päätös | pieni | noin −3 % |
+| C: vähän päätöksiä | kohtalainen | noin −7 % |
+| D–E: ei juuri päätöksiä | suuri | noin −8,5 % |
+
+Laskuri ottaa siis kauppiaan arviosta huomioon osan, koska yksittäinen arvio voi osua ohi. Useampi
+samansuuntainen arvio lähes samanlaisista autoista korjaa enemmän. Vaihteluväli perustuu edelleen
+Verohallinnon päätöksiin.
+
+**Laskuri tarkistaa kauppiaiden osuvuuden.** Kun samasta autosta tulee myöhemmin Verohallinnon päätös
+(sama malli ja teho, ensirekisteröinti saman kuukauden sisällä, kilometrit lähellä), laskuri vertaa sekä
+kauppiaan että omaa arviotaan toteutuneeseen. Koulutustila näyttää kauppiaalle, kumpi osui lähemmäs.
+Kun vertailuja on vähintään 20, kuukausiajo säätää korjauksen voimakkuutta: jos kauppiaat osuvat
+laskuria lähemmäs, korjaus vahvistuu (enintään nelinkertaiseksi), ja jos huonommin, se heikkenee.
+
+**Arviot yhteiseen malliin.** Arviot tallentuvat kauppiaan selaimeen ja korjaavat tuloksia heti siinä.
+Jotta ne parantavat laskuria kaikille käyttäjille:
+
+1. Kauppias valitsee koulutustilassa *Lataa lähettämättömät arviot* ja lähettää tiedoston ylläpitäjälle.
+2. Ylläpitäjä lisää tiedoston GitHubissa kansioon `data/palaute/` (**Add file → Upload files**).
+3. Päivitys käynnistyy itsestään, lisää arviot laskuriin ja laskee kauppiaiden osuvuuden.
+   Arvio, jolle on jo tullut toteutunut päätös, korvautuu päätöksellä.
+
+Tiedosto sisältää auton tiedot, laskurin ja kauppiaan arviot sekä satunnaisen kauppiastunnuksen, mutta ei
+kauppiaan nimeä eikä koulutustilan huomioita. Tiedostot näkyvät julkisessa tietovarastossa.
+
+**Kuinka paljon hyötyä on odotettavissa?** Testasin vaikutusta simuloimalla kauppiaan, joka on arvioinut
+kaikki huhti–kesäkuun tai heinä–syyskuun 2026 verotetut autot (muut kuin verottomat sähköautot) ennen
+päätöstä tietyllä tarkkuudella. Muiden autojen arviot muuttuivat vähän:
+
+| Kauppiaan arvioiden tarkkuus | Yleiset | Harvinaiset | Erittäin harvinaiset |
+|---|---:|---:|---:|
+| ±5 % | −0,15 %-yks. | −0,14 %-yks. | 0 |
+| ±10 % | −0,07 … 0 | −0,03 … −0,02 | −0,65 … 0 |
+| ±20 % | +0,04 … +0,07 | +0,20 … +0,25 | −0,65 … 0 |
+
+(Muutos mediaanivirheessä prosenttiyksikköinä, kahden jakson vaihteluväli.) Harvinaisten autojen virheet
+ovat pääosin autokohtaisia, joten kauppiaan arvio yhdestä autosta kertoo vain vähän toisesta. Eniten
+kauppiaan tiedosta hyötyvät lähes samanlaiset autot, joita arvioidaan useita. Siksi laskuri mittaa
+kauppiaiden osuvuutta toteutuneilla päätöksillä ja säätää korjausta sen mukaan.
+
+Vaihtoehtona kokeiltiin kauppiaan arvion käyttämistä tavallisena verrokkina. Se paransi tarkkuutta vielä
+vähemmän, joten se ei ole käytössä (`ASETUKSET.kauppias.verrokkina`).
 
 ## Käyttöönotto GitHubissa
 
@@ -166,6 +229,9 @@ node tyokalut/rakenna_malli.mjs
 |---|---|
 | `index.html` | Laskurin sivu |
 | `js/sovellus.js` | Lomake ja tulosten näyttäminen |
+| `koulutus.html`, `js/koulutus.js` | Koulutustila kauppiaille |
+| `js/palaute.js` | Kauppiaiden arvioiden tallennus, vienti, tuonti ja vertailu toteutuneisiin päätöksiin |
+| `js/apu.js` | Yhteiset muotoilu- ja apufunktiot |
 | `js/malli.js` | Arviomalli, verrokkien painotus ja tarkkuustesti |
 | `js/verotaulukot.js` | Viralliset autoveroprosenttitaulukot |
 | `tyokalut/hae_aineisto.py` | Hakee ja muuntaa Verohallinnon Excelit |
@@ -174,7 +240,8 @@ node tyokalut/rakenna_malli.mjs
 | `.github/workflows/paivita-aineisto.yml` | Kuukausittainen automaattinen päivitys |
 | `data/paatokset-VVVV.json` | Muunnetut vuositaulukot (opetusta varten) |
 | `data/malli.json` | Opetettu malli, hintaindeksi, tarkkuus ja valintalistat |
-| `data/merkit/` | Päätökset merkeittäin; selain lataa vain valitun merkin |
+| `data/merkit/` | Päätökset ja kauppiaiden arviot merkeittäin; selain lataa vain valitun merkin |
+| `data/palaute/` | Kauppiaiden arviotiedostot koulutustilasta |
 
 ## Rajoitukset
 
