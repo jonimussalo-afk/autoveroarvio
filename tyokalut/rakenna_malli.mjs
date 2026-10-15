@@ -1,13 +1,15 @@
 // Opettaa arviomallin data/-kansion päätöksistä, mittaa sen tarkkuuden ja tallentaa:
 //   data/malli.json            kertoimet, hintaindeksi, tarkkuus ja valintalistat
-//   data/merkit/<merkki>.json  kunkin merkin päätökset (selain lataa vain valitun merkin)
+//   data/merkit/<merkki>.json  kunkin merkin päätökset (selain lataa vain valitun merkin) sekä kauppiaiden
+//                              arviot koulutustilasta (data/palaute/*.json), joita ei ole vielä korvannut päätös
 // Käyttö: node tyokalut/rakenna_malli.mjs
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, unlinkSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   yhdistaAineisto, koulutaMalli, laskeMerkkiPoikkeamat, kalibroi, ajallinenTesti, TUKI_SELITE,
 } from "../js/malli.js";
+import { tuoJson, yhdistaPalautteet, etsiToteutunut, arvoKauppiaalta, palautteetTiedostoksi } from "../js/palaute.js";
 
 const juuri = join(dirname(fileURLToPath(import.meta.url)), "..");
 const kansio = join(juuri, "data");
@@ -60,6 +62,55 @@ for (const [luokka, t] of Object.entries(malli.ajallinen.luokat)) {
   console.log(`  ${luokka}: n=${t.n}, mediaanivirhe ${t.mediaaniVirhePros} %, alle 10 % virhe ${t.alle10Pros} %, 80 % välin osuma ${t.valinOsuma} %`);
 }
 
+// ---------- kauppiaiden arviot (koulutustila) ----------
+// Arviot luetaan kansiosta data/palaute/. Jos samasta autosta on sittemmin tehty Verohallinnon päätös, arvio
+// korvautuu päätöksellä, ja sitä käytetään kauppiaiden osuvuuden mittaamiseen. Muut arviot lisätään
+// merkkitiedostoihin verrokeiksi (lähde = kauppiaan arvio).
+const palauteKansio = join(kansio, "palaute");
+let palautteet = [];
+if (existsSync(palauteKansio)) {
+  for (const f of readdirSync(palauteKansio).filter((f) => f.endsWith(".json")).sort()) {
+    try {
+      palautteet = yhdistaPalautteet(palautteet, tuoJson(readFileSync(join(palauteKansio, f), "utf8")));
+    } catch (e) {
+      console.warn(`VAROITUS: ${f} ei ole kelvollinen arviotiedosto (${e.message})`);
+    }
+  }
+}
+const tarkistetut = [], kaytossa = [];
+for (const pa of palautteet) {
+  const r = etsiToteutunut(aineisto, pa);
+  if (r >= 0) tarkistetut.push({ pa, r }); else kaytossa.push(pa);
+}
+const mediaani = (v) => { const s = v.slice().sort((a, b) => a - b); return s.length ? s[Math.floor(s.length / 2)] : null; };
+const virheKauppias = tarkistetut.map(({ pa, r }) => Math.abs(Math.log(arvoKauppiaalta(pa) / aineisto.A.arvo[r])));
+const virheLaskuri = tarkistetut.filter(({ pa }) => pa.laskuri && pa.laskuri.arvo > 0)
+  .map(({ pa, r }) => Math.abs(Math.log(pa.laskuri.arvo / aineisto.A.arvo[r])));
+const pros = (x) => (x == null ? null : Math.round((Math.exp(x) - 1) * 1000) / 10);
+malli.koulutus = {
+  arvioita: palautteet.length,
+  verrokkeina: kaytossa.length,
+  kauppiaita: new Set(palautteet.map((pa) => pa.kauppias || "?")).size,
+  tarkistettu: {
+    n: tarkistetut.length,
+    kauppiaanMediaaniVirhePros: pros(mediaani(virheKauppias)),
+    laskurinMediaaniVirhePros: pros(mediaani(virheLaskuri)),
+    kauppiasLahempana: tarkistetut.filter(({ pa, r }) => pa.laskuri && pa.laskuri.arvo > 0
+      && Math.abs(Math.log(arvoKauppiaalta(pa) / aineisto.A.arvo[r])) < Math.abs(Math.log(pa.laskuri.arvo / aineisto.A.arvo[r]))).length,
+  },
+};
+// Kun arvioita on verrattu riittävän moneen päätökseen, korjauksen kutistus säädetään osuvuuden mukaan:
+// (kauppiaan virhe / laskurin virhe)², rajattuna välille 0,25–4. Osuvat kauppiaat korjaavat siis enemmän.
+if (virheKauppias.length >= 20 && virheLaskuri.length >= 20) {
+  const suhde = (mediaani(virheKauppias) / Math.max(0.005, mediaani(virheLaskuri))) ** 2;
+  malli.kauppiasKutistus = Math.round(Math.min(4, Math.max(0.25, suhde)) * 100) / 100;
+}
+console.log(`Kauppiaiden arviot: ${palautteet.length} (${malli.koulutus.kauppiaita} kauppiasta), verrokkeina ${kaytossa.length}, ` +
+  `toteutuneeseen päätökseen verrattu ${tarkistetut.length}` +
+  (tarkistetut.length ? ` (kauppiaan mediaanivirhe ${malli.koulutus.tarkistettu.kauppiaanMediaaniVirhePros} %, ` +
+    `laskurin ${malli.koulutus.tarkistettu.laskurinMediaaniVirhePros} %)` : "") +
+  (malli.kauppiasKutistus ? `, korjauksen kutistuskerroin ${malli.kauppiasKutistus}` : ""));
+
 // ---------- merkkikohtaiset tiedostot ----------
 const merkkiKansio = join(kansio, "merkit");
 mkdirSync(merkkiKansio, { recursive: true });
@@ -67,16 +118,23 @@ for (const f of readdirSync(merkkiKansio)) if (f.endsWith(".json")) unlinkSync(j
 
 const SARAKKEET = ["merkki", "malli", "kayttovoima", "korimalli", "vetotapa", "vaihteisto"];
 const merkit = new Map(); // nimi -> { sanastot, hakemistot, sarakkeet, rivit }
-for (const t of tiedostot) {
+const LAHDESARAKKEET = ["lahde", "palauteId"]; // vain merkeille, joilla on kauppiaiden arvioita
+const kauppiasTiedosto = kaytossa.length ? [palautteetTiedostoksi(kaytossa)] : [];
+for (const t of [...tiedostot, ...kauppiasTiedosto]) {
   const S = t.sarakkeet, D = t.sanastot;
-  const lukusarakkeet = Object.keys(S).filter((c) => !SARAKKEET.includes(c));
+  const lukusarakkeet = Object.keys(S).filter((c) => !SARAKKEET.includes(c) && !LAHDESARAKKEET.includes(c));
   for (let r = 0; r < t.rivit; r++) {
     const nimi = D.merkki[S.merkki[r]];
     let m = merkit.get(nimi);
     if (!m) {
-      m = { sanastot: Object.fromEntries(SARAKKEET.map((c) => [c, []])), hak: Object.fromEntries(SARAKKEET.map((c) => [c, new Map()])), sarakkeet: {}, rivit: 0 };
+      m = { sanastot: Object.fromEntries(SARAKKEET.map((c) => [c, []])), hak: Object.fromEntries(SARAKKEET.map((c) => [c, new Map()])),
+        sarakkeet: {}, rivit: 0, lahde: [], palauteId: [], kauppias: 0 };
       merkit.set(nimi, m);
     }
+    const onKauppias = S.lahde ? S.lahde[r] === 1 : false;
+    m.lahde.push(onKauppias ? 1 : 0);
+    m.palauteId.push(onKauppias ? S.palauteId[r] : 0);
+    if (onKauppias) m.kauppias++;
     for (const c of SARAKKEET) {
       const arvo = D[c][S[c][r]];
       let i = m.hak[c].get(arvo);
@@ -94,8 +152,9 @@ for (const [nimi, m] of [...merkit.entries()].sort((a, b) => b[1].rivit - a[1].r
   let f = tiedostonimi(nimi);
   while (kaytetyt.has(f)) f += "-2";
   kaytetyt.add(f);
+  if (m.kauppias) { m.sarakkeet.lahde = m.lahde; m.sarakkeet.palauteId = m.palauteId; }
   writeFileSync(join(merkkiKansio, f + ".json"), JSON.stringify({ merkki: nimi, rivit: m.rivit, sanastot: m.sanastot, sarakkeet: m.sarakkeet }));
-  merkkiLista.push([nimi, m.rivit, f + ".json"]);
+  merkkiLista.push([nimi, m.rivit - m.kauppias, f + ".json"]);
 }
 console.log(`Kirjoitettu ${merkkiLista.length} merkkitiedostoa kansioon data/merkit/`);
 
