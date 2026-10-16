@@ -45,7 +45,10 @@ for (const [kauppias, raportti] of kauppiaittain) {
   console.log(`\n## Kauppias ${kauppias}\n`);
   console.log(`Raportit: ${raportti.tiedostot.join(", ")}. Merkit: ${(raportti.testi.merkit || []).join(", ")}.`);
   console.log(`Vastattu ${an.vastattu}, ohitettu ${an.ohitettu}. Kauppias osui laskuria lähemmäs ${Y.kauppiasLahempana} / ${Y.n} ` +
-    `(merkkitesti p = ${Y.merkkitesti}).\n`);
+    `(merkkitesti p = ${Y.merkkitesti}).`);
+  const nh = an.nykyhinta;
+  console.log(`Kauppiaan arviota verrataan nykyhintaiseen toteutuneeseen (kerroin ${nh.kerroinPienin}–${nh.kerroinSuurin}). ` +
+    `Ilman korjausta kauppiaan mediaanivirhe olisi ${p(nh.ilmanKorjaustaMediaaniVirhePros)} ja harha ${p(nh.ilmanKorjaustaHarhaPros)}.\n`);
   console.log("| Ryhmä | n | Kauppiaan mediaanivirhe | Laskurin mediaanivirhe | Kauppiaan harha | Kauppias lähempänä |");
   console.log("|---|---:|---:|---:|---:|---:|");
   const rivi = (nimi, o) => console.log(`| ${nimi} | ${o.n} | ${p(o.kauppiaanMediaaniVirhePros)} | ${p(o.laskurinMediaaniVirhePros)} | ` +

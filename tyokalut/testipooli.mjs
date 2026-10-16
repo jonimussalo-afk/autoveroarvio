@@ -4,10 +4,15 @@
 // toteutunutta veroa (sokkotesti). Pooliin valitaan viimeisten kuukausien päätöksistä merkeittäin ja
 // harvinaisuusluokittain enintään `perRyhma` autoa, eri malleja ensin. Jokaiselle lasketaan laskurin arvio
 // ilman autoa itseään, jotta kauppiaan ja laskurin osuvuutta voidaan verrata reilusti.
+// Lisäksi tallennetaan nykyhintakerroin: kuinka paljon saman auton verotusarvo on muuttunut verotuskuukaudesta
+// uusimpaan kuukauteen laskurin hintaindeksin mukaan (käyttövoimaryhmittäin). Kauppias arvioi nykyhinnoin,
+// joten vertailussa toteutunut arvo kerrotaan tällä.
 //
 // Käyttö: kuukausiajo (rakenna_malli.mjs) kutsuu funktiota teeTestipooli.
 
-import { arvioi, harvinaisuus, malliTasot, rivinKohde, ERIKOISKORIT } from "../js/malli.js";
+import {
+  arvioi, harvinaisuus, malliTasot, rivinKohde, ERIKOISKORIT, polttoaineryhma, kuukausiNumero, indeksiArvo, pvmLuvusta,
+} from "../js/malli.js";
 
 const iso = (ms) => new Date(ms).toISOString().slice(0, 10);
 // Pakettiauto- ja matkailuautopohjat eivät ole kauppiaiden tavallisia henkilöautoja
@@ -45,6 +50,13 @@ export function teeTestipooli(aineisto, malli, { kuukausia = 6, perRyhma = 10, s
     ryhmat.get(g).push({ r, kohde, luokka });
   }
 
+  // Nykyinen hintataso = uusimman päätöskuukauden taso
+  const nytKk = kuukausiNumero(pvmLuvusta(aineisto.viimeisinPaatos));
+  const nykyhinta = (kayttovoima, paatos) => {
+    const K = malli.kertoimet[polttoaineryhma(kayttovoima)];
+    if (!K) return 1;
+    return Math.round(Math.exp(indeksiArvo(K.indeksi, nytKk) - indeksiArvo(K.indeksi, kuukausiNumero(paatos))) * 10000) / 10000;
+  };
   let s = siemen;
   const satunnainen = () => ((s = (s * 16807) % 2147483647) - 1) / 2147483646;
   const autot = [];
@@ -80,6 +92,7 @@ export function teeTestipooli(aineisto, malli, { kuukausia = 6, perRyhma = 10, s
         luokka: o.luokka, tuki: t.tuki, auto, verotettu: iso(A.paatos[r]), veroprosentti: Math.round(A.veropros[r] * 10) / 10,
         laskuri: { arvo: Math.round(t.arvio), ala80: Math.round(t.ala80), yla80: Math.round(t.yla80) },
         toteutunut: { arvo: A.arvo[r] },
+        nykyhinta: { kerroin: nykyhinta(o.kohde.kayttovoima, A.paatos[r]) },
       });
     }
   }
@@ -87,6 +100,7 @@ export function teeTestipooli(aineisto, malli, { kuukausia = 6, perRyhma = 10, s
   for (const a of autot) lkm[a.luokka]++;
   return {
     tyyppi: "autoveroarvio-testipooli", versio: 1, luotu: new Date().toISOString(), laskurinVersio: malli.versio,
-    jakso: { alku: iso(alku), loppu: iso(Date.UTC(v, kk - 1, aineisto.viimeisinPaatos % 100)) }, lkm, autot,
+    jakso: { alku: iso(alku), loppu: iso(Date.UTC(v, kk - 1, aineisto.viimeisinPaatos % 100)) },
+    hintatasoKuukausi: `${v}-${String(kk).padStart(2, "0")}`, lkm, autot,
   };
 }
