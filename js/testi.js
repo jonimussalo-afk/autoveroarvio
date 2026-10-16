@@ -132,7 +132,7 @@ function aloita() {
     tyyppi: "autoveroarvio-arviointitesti", versio: 1,
     id: Math.floor(Math.random() * 0xffffffff).toString(36), aloitettu: new Date().toISOString(), valmis: null,
     kauppias: kauppiasTunnus(), merkit: [...valitut].sort(),
-    pooli: { luotu: pooli.luotu, jakso: pooli.jakso, laskurinVersio: pooli.laskurinVersio },
+    pooli: { luotu: pooli.luotu, jakso: pooli.jakso, laskurinVersio: pooli.laskurinVersio, hintatasoKuukausi: pooli.hintatasoKuukausi || null },
     autot, vastaukset: autot.map(() => null), kohta: 0,
   };
   tallennaTila();
@@ -140,6 +140,15 @@ function aloita() {
 }
 
 // ---------- kysymykset ----------
+
+function ikaTeksti(ensirek, verotettu) {
+  const e = new Date(ensirek), v = new Date(verotettu);
+  let kuukausia = (v.getUTCFullYear() - e.getUTCFullYear()) * 12 + (v.getUTCMonth() - e.getUTCMonth());
+  if (v.getUTCDate() < e.getUTCDate()) kuukausia--;
+  kuukausia = Math.max(0, kuukausia);
+  const vuodet = Math.floor(kuukausia / 12), kk2 = kuukausia % 12;
+  return `${vuodet} v${kk2 ? ` ${kk2} kk` : ""}`;
+}
 
 function autonTiedot(a) {
   const t = a.auto;
@@ -154,12 +163,13 @@ function autonTiedot(a) {
     ["Ensirekisteröinti", kk(Date.parse(t.ensirek))],
     ["Ajokilometrit", `${Math.round(t.km).toLocaleString("fi-FI")} km`],
     ["Verotettu", kk(Date.parse(a.verotettu))],
+    ["Ikä verotettaessa", ikaTeksti(t.ensirek, a.verotettu)],
     ["Veroprosentti", pros(a.veroprosentti)],
   ].filter(Boolean);
   return `<h3>${esc(t.merkki)} ${esc(t.malli)}</h3>
     <div class="tiedot">${rivit.map(([k, v]) => `<div><span>${esc(k)}</span>${esc(v)}</div>`).join("")}</div>
-    <p class="pieni">Arvioi autovero, jonka Verohallinto määräsi tälle autolle verotushetkellä. Laskurin arvion ja
-      toteutuneen veron näet testin lopussa.</p>`;
+    <p class="pieni">Arvioi nykyhinnoin, paljonko autoveroa tällaisesta autosta määrättäisiin, kun ikä ja ajokilometrit ovat
+      kuten verotettaessa. Laskurin arvion ja toteutuneen veron näet testin lopussa.</p>`;
 }
 
 function naytaKysymys() {
@@ -224,7 +234,7 @@ function teeRaportti() {
     testi: { id: tila.id, aloitettu: tila.aloitettu, valmis: tila.valmis, kauppias: tila.kauppias, merkit: tila.merkit, pooli: tila.pooli },
     autot: tila.autot.map((a, i) => ({
       nro: i + 1, id: a.id, luokka: a.luokka, tuki: a.tuki, auto: a.auto, verotettu: a.verotettu, veroprosentti: a.veroprosentti,
-      vastaus: tila.vastaukset[i], laskuri: a.laskuri, toteutunut: a.toteutunut,
+      vastaus: tila.vastaukset[i], laskuri: a.laskuri, toteutunut: a.toteutunut, nykyhinta: a.nykyhinta || { kerroin: 1 },
     })),
   };
 }
@@ -245,6 +255,11 @@ function naytaTulos() {
   const an = analysoiTesti(raportti);
   const Y = an.yhteensa;
   const harha = Y.kauppiaanHarhaPros;
+  const hk = tila.pooli && tila.pooli.hintatasoKuukausi;
+  const hintatasoKk = hk ? `${Number(hk.slice(5, 7))}/${hk.slice(0, 4)}` : null;
+  const prosMuutos = (k) => `${k >= 1 ? "+" : "−"}${Math.abs((k - 1) * 100).toFixed(1).replace(".", ",")} %`;
+  const muutosVali = an.nykyhinta.kerroinPienin === an.nykyhinta.kerroinSuurin
+    ? prosMuutos(an.nykyhinta.kerroinPienin) : `${prosMuutos(an.nykyhinta.kerroinPienin)} … ${prosMuutos(an.nykyhinta.kerroinSuurin)}`;
   const luokkaRivit = Object.entries(LUOKKA_NIMET).map(([l, nimi]) => {
     const o = an.luokittain[l];
     return o.n ? `<tr><td>${nimi}</td><td class="oikea">${o.n}</td><td class="oikea">${pros(o.kauppiaanMediaaniVirhePros)}</td>
@@ -263,8 +278,8 @@ function naytaTulos() {
       <td>${esc(r.auto.merkki)} ${esc(r.auto.malli)}<br><span class="pieni">${Math.round(r.auto.kw)} kW · ${esc(r.auto.ensirek.slice(0, 4))} ·
         ${Math.round(r.auto.km / 1000)} tkm · ${esc(LUOKKA_NIMET[r.luokka].toLowerCase())}</span></td>
       <td class="oikea ${lahempana ? "voitto" : ""}">${v.vero ? euro(v.vero) : "ohitettu"}</td>
-      <td class="oikea">${euro(vero(r.laskuri.arvo))}</td>
-      <td class="oikea"><strong>${euro(vero(r.toteutunut.arvo))}</strong></td>
+      <td class="oikea">${euro(vero(r.laskuri.arvo * r.kerroin))}</td>
+      <td class="oikea"><strong>${euro(vero(r.toteutunutNyt))}</strong></td>
       <td class="oikea ${lahempana ? "voitto" : ""}">${virhe(r.eK)}</td>
       <td class="oikea">${virhe(r.eL)}</td>
     </tr>`;
@@ -282,7 +297,8 @@ function naytaTulos() {
       </div>
       <p>${harha == null ? "" : Math.abs(harha) < 2 ? "Arviosi eivät olleet järjestelmällisesti liian korkeita tai matalia." :
         `Arviosi olivat tyypillisesti ${Math.abs(harha).toLocaleString("fi-FI")} % toteutunutta ${harha < 0 ? "matalampia" : "korkeampia"}.`}
-        Virhe on laskettu verotusarvosta, joten veroprosentti ei vaikuta siihen.</p>
+        Virhe on laskettu verotusarvosta, joten veroprosentti ei vaikuta siihen, ja toteutunut vero on muutettu
+        nykyhintoihin, koska arvioit nykyhinnoin.</p>
       <div class="taulukko"><table>
         <thead><tr><th>Luokka</th><th class="oikea">Arvioitu</th><th class="oikea">Sinä</th><th class="oikea">Laskuri</th><th class="oikea">Osuit lähemmäs</th></tr></thead>
         <tbody>${luokkaRivit}</tbody></table></div>
@@ -301,10 +317,12 @@ function naytaTulos() {
     <div class="kortti">
       <h2>Autot</h2>
       <div class="taulukko"><table>
-        <thead><tr><th>#</th><th>Auto</th><th class="oikea">Sinä</th><th class="oikea">Laskuri</th><th class="oikea">Toteutunut</th>
+        <thead><tr><th>#</th><th>Auto</th><th class="oikea">Sinä</th><th class="oikea">Laskuri</th><th class="oikea">Toteutunut nykyhinnoin</th>
         <th class="oikea">Sinun virhe</th><th class="oikea">Laskurin virhe</th></tr></thead>
         <tbody>${autoRivit}</tbody></table></div>
-      <p class="pieni">Autoverot laskettu kunkin auton veroprosentilla. Korostettu: osuit laskuria lähemmäs.</p>
+      <p class="pieni">Autoverot laskettu kunkin auton veroprosentilla. Laskurin arvio ja toteutunut vero on muutettu
+        nykyiseen hintatasoon${hintatasoKk ? ` (${hintatasoKk})` : ""} Verohallinnon päätösten hintaindeksillä; muutos oli
+        ${muutosVali}. Korostettu: osuit laskuria lähemmäs.</p>
     </div>`;
   const nimi = `arviointitesti-${tila.kauppias}-${tila.valmis.slice(0, 10)}`;
   $("lataaJson").addEventListener("click", () => {
@@ -324,13 +342,14 @@ function csv(rivit) {
   const d = (x, desim = 0) => (x == null || !Number.isFinite(x) ? "" : x.toFixed(desim).replace(".", ","));
   const p = (x) => (x == null ? "" : d((Math.exp(x) - 1) * 100, 1));
   const otsikot = ["nro", "luokka", "merkki", "malli", "kw", "kayttovoima", "ensirek", "km", "verotettu", "veroprosentti",
-    "kauppiaan_vero", "varmuus", "laskurin_vero", "toteutunut_vero", "kauppiaan_virhe_pros", "laskurin_virhe_pros", "huomio"];
+    "kauppiaan_vero", "varmuus", "laskurin_vero", "toteutunut_vero", "nykyhintakerroin", "toteutunut_vero_nykyhinnoin",
+    "kauppiaan_virhe_pros", "kauppiaan_virhe_verotushetken_hinnoin_pros", "laskurin_virhe_pros", "huomio"];
   const rivi = (r) => {
     const v = r.vastaus || {};
     const vero = (arvo) => (arvo * r.veroprosentti) / 100;
     return [r.nro, r.luokka, r.auto.merkki, r.auto.malli, d(r.auto.kw), r.auto.kayttovoima, r.auto.ensirek, d(r.auto.km),
       r.verotettu, d(r.veroprosentti, 1), v.vero ?? "", v.varmuus ?? "", d(vero(r.laskuri.arvo)), d(vero(r.toteutunut.arvo)),
-      p(r.eK), p(r.eL), (v.huomio || "").replace(/[;\n\r]/g, " ")].join(";");
+      d(r.kerroin, 4), d(vero(r.toteutunutNyt)), p(r.eK), p(r.eKverotushetki), p(r.eL), (v.huomio || "").replace(/[;\n\r]/g, " ")].join(";");
   };
   return "﻿" + [otsikot.join(";"), ...rivit.map(rivi)].join("\r\n");
 }

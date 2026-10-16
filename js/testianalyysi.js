@@ -25,16 +25,24 @@ function merkkitesti(k, n) {
   return Math.min(1, 2 * Math.min(yla, ala));
 }
 
-/** Rivikohtaiset virheet log-asteikolla suhteessa toteutuneeseen verotusarvoon. */
+/**
+ * Rivikohtaiset virheet log-asteikolla. Kauppias arvioi nykyhinnoin, joten hänen arviotaan verrataan toteutuneeseen
+ * verotusarvoon, joka on muutettu nykyiseen hintatasoon (nykyhinta.kerroin). Laskurin arvio on laskettu
+ * verotushetken hintatasolla, joten sitä verrataan toteutuneeseen sellaisenaan.
+ */
 export function testinRivit(raportti) {
   return raportti.autot.map((a) => {
     const v = a.vastaus || {};
     const toteutunut = a.toteutunut.arvo;
+    const kerroin = a.nykyhinta && a.nykyhinta.kerroin > 0 ? a.nykyhinta.kerroin : 1;
     const kauppiaanArvo = v.vero > 0 && a.veroprosentti > 0 ? v.vero / (a.veroprosentti / 100) : null;
     return {
       ...a,
       kauppiaanArvo,
-      eK: kauppiaanArvo ? Math.log(kauppiaanArvo / toteutunut) : null,
+      kerroin,
+      toteutunutNyt: toteutunut * kerroin,
+      eK: kauppiaanArvo ? Math.log(kauppiaanArvo / (toteutunut * kerroin)) : null,
+      eKverotushetki: kauppiaanArvo ? Math.log(kauppiaanArvo / toteutunut) : null,
       eL: Math.log(a.laskuri.arvo / toteutunut),
     };
   });
@@ -93,8 +101,16 @@ export function analysoiTesti(raportti) {
   let paino = null;
   if (f !== null) paino = f <= 0.02 ? 0 : f >= 0.77 ? 5 : Math.round(((1.5 * f) / (1 - f)) * 100) / 100;
   const riittava = vastatut.length >= 15 && pHarvinaiset.n >= 8;
+  const kertoimet = rivit.map((r) => r.kerroin);
+  const nykyhinta = {
+    kerroinPienin: Math.min(...kertoimet), kerroinSuurin: Math.max(...kertoimet),
+    // vertailun vuoksi: kauppiaan virhe verotushetken hintatasoon verrattuna
+    ilmanKorjaustaMediaaniVirhePros: prosentiksi(mediaani(vastatut.map((r) => Math.abs(r.eKverotushetki)))),
+    ilmanKorjaustaHarhaPros: prosentiksi(mediaani(vastatut.map((r) => r.eKverotushetki))),
+  };
   return {
     rivit,
+    nykyhinta,
     vastattu: vastatut.length,
     ohitettu: rivit.filter((r) => r.vastaus && r.vastaus.ohitettu).length,
     yhteensa: tunnusluvut(rivit),
@@ -117,10 +133,13 @@ export function analysoiTesti(raportti) {
 
 export const OHJE_TEKOALYLLE = `Tämä on autoveroarvio-laskurin arviointitestin raportti (https://jonimussalo-afk.github.io/autoveroarvio/).
 Kauppias arvioi sokkona, näkemättä laskurin arviota tai toteutunutta veroa, Verohallinnon jo verottamien autojen
-autoveron. Kentät: auto (auton tiedot), verotettu (Verohallinnon päätöspäivä), veroprosentti, vastaus.vero (kauppiaan
-veroarvio euroina; null = ohitettu), vastaus.varmuus (arvaus / melko / varma), laskuri.arvo (laskurin arvio
-verotusarvosta, laskettu ilman autoa itseään), toteutunut.arvo (Verohallinnon verotusarvo). Kauppiaan verotusarvo =
-vastaus.vero / (veroprosentti / 100).
+autoveron nykyhinnoin (auton ikä ja ajokilometrit kuten verotettaessa). Kentät: auto (auton tiedot), verotettu
+(Verohallinnon päätöspäivä), veroprosentti, vastaus.vero (kauppiaan veroarvio euroina; null = ohitettu),
+vastaus.varmuus (arvaus / melko / varma), laskuri.arvo (laskurin arvio verotusarvosta verotushetken hintatasolla,
+laskettu ilman autoa itseään), toteutunut.arvo (Verohallinnon verotusarvo) ja nykyhinta.kerroin (hintatason muutos
+verotuskuukaudesta uusimpaan kuukauteen laskurin hintaindeksin mukaan). Kauppiaan verotusarvo =
+vastaus.vero / (veroprosentti / 100); sitä verrataan arvoon toteutunut.arvo × nykyhinta.kerroin, laskurin arviota
+arvoon toteutunut.arvo.
 Analysoi: (1) kauppiaan ja laskurin virheet log-asteikolla log(arvio / toteutunut): mediaani, keskiarvo ja
 itseisarvon mediaani kaikista ja harvinaisuusluokittain (luokka) sekä varmuuden mukaan; (2) kauppiaan harha
 (virheiden mediaani etumerkillä) ja onko se luokasta riippumaton; (3) paras painotus w luokittain yhdistelmälle
