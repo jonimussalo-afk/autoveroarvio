@@ -10,6 +10,7 @@ import {
   yhdistaAineisto, koulutaMalli, laskeMerkkiPoikkeamat, kalibroi, ajallinenTesti, TUKI_SELITE,
 } from "../js/malli.js";
 import { tuoJson, yhdistaPalautteet, etsiToteutunut, arvoKauppiaalta, palautteetTiedostoksi } from "../js/palaute.js";
+import { teeTestipooli } from "./testipooli.mjs";
 
 const juuri = join(dirname(fileURLToPath(import.meta.url)), "..");
 const kansio = join(juuri, "data");
@@ -111,6 +112,26 @@ console.log(`Kauppiaiden arviot: ${palautteet.length} (${malli.koulutus.kauppiai
     `laskurin ${malli.koulutus.tarkistettu.laskurinMediaaniVirhePros} %)` : "") +
   (malli.kauppiasKutistus ? `, korjauksen kutistuskerroin ${malli.kauppiasKutistus}` : ""));
 
+// Arviointitestin perusteella tehty kauppiaskohtainen kalibrointi (harha ja paino), ks. README
+const kalibrointiPolku = join(kansio, "kalibrointi.json");
+if (existsSync(kalibrointiPolku)) {
+  try {
+    const kal = JSON.parse(readFileSync(kalibrointiPolku, "utf8"));
+    const kauppiaat = {};
+    for (const [tunnus, k] of Object.entries(kal.kauppiaat || {})) {
+      const harha = Number(k.harha), paino = Number(k.paino);
+      kauppiaat[tunnus] = {
+        harha: Number.isFinite(harha) ? Math.max(-0.5, Math.min(0.5, harha)) : 0,
+        paino: Number.isFinite(paino) ? Math.max(0, Math.min(5, paino)) : 1,
+      };
+    }
+    malli.kauppiaskalibrointi = { paivitetty: kal.paivitetty || null, kauppiaat };
+    console.log(`Kalibrointi: ${Object.keys(kauppiaat).length} kauppiaan harha ja paino (data/kalibrointi.json)`);
+  } catch (e) {
+    console.warn(`VAROITUS: data/kalibrointi.json ei ole kelvollinen (${e.message})`);
+  }
+}
+
 // ---------- merkkikohtaiset tiedostot ----------
 const merkkiKansio = join(kansio, "merkit");
 mkdirSync(merkkiKansio, { recursive: true });
@@ -118,7 +139,7 @@ for (const f of readdirSync(merkkiKansio)) if (f.endsWith(".json")) unlinkSync(j
 
 const SARAKKEET = ["merkki", "malli", "kayttovoima", "korimalli", "vetotapa", "vaihteisto"];
 const merkit = new Map(); // nimi -> { sanastot, hakemistot, sarakkeet, rivit }
-const LAHDESARAKKEET = ["lahde", "palauteId"]; // vain merkeille, joilla on kauppiaiden arvioita
+const LAHDESARAKKEET = ["lahde", "palauteId", "kauppias"]; // vain merkeille, joilla on kauppiaiden arvioita
 const kauppiasTiedosto = kaytossa.length ? [palautteetTiedostoksi(kaytossa)] : [];
 for (const t of [...tiedostot, ...kauppiasTiedosto]) {
   const S = t.sarakkeet, D = t.sanastot;
@@ -128,12 +149,15 @@ for (const t of [...tiedostot, ...kauppiasTiedosto]) {
     let m = merkit.get(nimi);
     if (!m) {
       m = { sanastot: Object.fromEntries(SARAKKEET.map((c) => [c, []])), hak: Object.fromEntries(SARAKKEET.map((c) => [c, new Map()])),
-        sarakkeet: {}, rivit: 0, lahde: [], palauteId: [], kauppias: 0 };
+        sarakkeet: {}, rivit: 0, lahde: [], palauteId: [], kauppias: 0, kauppiasSanasto: [""], kauppiasHak: new Map([["", 0]]), kauppiasRivit: [] };
       merkit.set(nimi, m);
     }
     const onKauppias = S.lahde ? S.lahde[r] === 1 : false;
     m.lahde.push(onKauppias ? 1 : 0);
     m.palauteId.push(onKauppias ? S.palauteId[r] : 0);
+    const tunnus = onKauppias && S.kauppias ? D.kauppias[S.kauppias[r]] || "" : "";
+    if (!m.kauppiasHak.has(tunnus)) { m.kauppiasHak.set(tunnus, m.kauppiasSanasto.length); m.kauppiasSanasto.push(tunnus); }
+    m.kauppiasRivit.push(m.kauppiasHak.get(tunnus));
     if (onKauppias) m.kauppias++;
     for (const c of SARAKKEET) {
       const arvo = D[c][S[c][r]];
@@ -152,11 +176,19 @@ for (const [nimi, m] of [...merkit.entries()].sort((a, b) => b[1].rivit - a[1].r
   let f = tiedostonimi(nimi);
   while (kaytetyt.has(f)) f += "-2";
   kaytetyt.add(f);
-  if (m.kauppias) { m.sarakkeet.lahde = m.lahde; m.sarakkeet.palauteId = m.palauteId; }
-  writeFileSync(join(merkkiKansio, f + ".json"), JSON.stringify({ merkki: nimi, rivit: m.rivit, sanastot: m.sanastot, sarakkeet: m.sarakkeet }));
+  const sanastot = m.kauppias ? { ...m.sanastot, kauppias: m.kauppiasSanasto } : m.sanastot;
+  if (m.kauppias) { m.sarakkeet.lahde = m.lahde; m.sarakkeet.palauteId = m.palauteId; m.sarakkeet.kauppias = m.kauppiasRivit; }
+  writeFileSync(join(merkkiKansio, f + ".json"), JSON.stringify({ merkki: nimi, rivit: m.rivit, sanastot, sarakkeet: m.sarakkeet }));
   merkkiLista.push([nimi, m.rivit - m.kauppias, f + ".json"]);
 }
 console.log(`Kirjoitettu ${merkkiLista.length} merkkitiedostoa kansioon data/merkit/`);
+
+// ---------- arviointitestin autopooli ----------
+alku = Date.now();
+const pooli = teeTestipooli(aineisto, malli);
+writeFileSync(join(kansio, "testi.json"), JSON.stringify(pooli));
+console.log(`Arviointitesti: ${pooli.autot.length} autoa (yleisiä ${pooli.lkm.yleinen}, harvinaisia ${pooli.lkm.harvinainen}, ` +
+  `erittäin harvinaisia ${pooli.lkm.erittain}) päätöksistä ${pooli.jakso.alku}–${pooli.jakso.loppu} (${((Date.now() - alku) / 1000).toFixed(1)} s)`);
 
 // Valintalistat selaimelle (yleisin ensin)
 const laske = (sarake) => {
