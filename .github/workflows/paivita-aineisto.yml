@@ -6,12 +6,13 @@ on:
     - cron: "0 5 12 * *"
   # Mahdollistaa käsin käynnistämisen Actions-välilehdeltä ("Run workflow")
   workflow_dispatch:
-  # Ajetaan myös, kun data/raaka/-kansioon lisätään käsin ladattu Excel tai data/palaute/-kansioon
-  # kauppiaiden arvioita koulutustilasta
+  # Ajetaan myös, kun data/raaka/-kansioon lisätään käsin ladattu Excel, data/palaute/-kansioon
+  # kauppiaiden arvioita koulutustilasta tai kalibrointia muutetaan (data/kalibrointi.json)
   push:
     paths:
       - "data/raaka/**"
       - "data/palaute/**"
+      - "data/kalibrointi.json"
 
 permissions:
   contents: write
