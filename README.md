@@ -171,6 +171,51 @@ kauppiaiden osuvuutta toteutuneilla päätöksillä ja säätää korjausta sen 
 Vaihtoehtona kokeiltiin kauppiaan arvion käyttämistä tavallisena verrokkina. Se paransi tarkkuutta vielä
 vähemmän, joten se ei ole käytössä (`ASETUKSET.kauppias.verrokkina`).
 
+## Arviointitesti ja kalibrointi
+
+Arviointitesti (`testi.html`, linkki koulutustilassa) on kertaluonteinen 30 auton sokkotesti, jolla mitataan,
+kuinka osuvia kauppiaan arviot ovat ja kuinka paljon niitä kannattaa painottaa.
+
+1. Kauppias valitsee merkit, joita tuntee parhaiten. Testi poimii niistä 30 autoa, jotka Verohallinto on
+   verottanut viimeisen kuuden kuukauden aikana: kolmannes yleisiä, kolmannes harvinaisia ja kolmannes
+   erittäin harvinaisia malleja. Vajaa luokka täydennetään muilla saman merkin autoilla.
+2. Kauppias näkee auton tiedot ja veroprosentin ja arvioi autoveron. Laskurin arviota ja toteutunutta veroa
+   hän ei näe ennen testin loppua, jotta arvio on aidosti hänen omansa. Hän voi merkitä, kuinka varma on, ja
+   kirjoittaa huomion. Testin voi keskeyttää; vastaukset säilyvät selaimessa.
+3. Lopussa kauppias näkee, kuinka lähelle hän osui ja miten laskuri pärjäsi samoissa autoissa, ja lataa
+   raportin (JSON, lisäksi taulukkona CSV). Raportti lähetetään ylläpitäjälle.
+
+Testin autot ovat tiedostossa `data/testi.json`, joka päivittyy kuukausiajossa. Laskurin arvio on laskettu
+kustakin autosta ilman autoa itseään, joten vertailu kauppiaan ja laskurin välillä on reilu.
+
+**Raportin analyysi.** Raportissa on valmis ohje tekoälylle (kenttä `ohjeTekoalylle`): sen voi antaa
+esimerkiksi Claudelle sellaisenaan. Samat luvut saa myös komennolla
+
+```
+node tyokalut/analysoi_testi.mjs arviointitesti-K-XXXXXX-2026-10-16.json
+```
+
+Analyysi kertoo kauppiaan ja laskurin mediaanivirheet harvinaisuusluokittain ja varmuuden mukaan,
+kauppiaan järjestelmällisen eron (harha), parhaan painotuksen kauppiaan ja laskurin välillä sekä
+suurimmat poikkeamat. Lopuksi se ehdottaa kalibrointia.
+
+**Kalibrointi.** Analyysin perusteella tiedostoon `data/kalibrointi.json` kirjataan kauppiaalle harha ja paino
+(komento `--kirjoita` tekee sen valmiiksi):
+
+```json
+{ "kauppiaat": { "K-XXXXXX": { "harha": -0.04, "paino": 1.6 } } }
+```
+
+- **harha** on kauppiaan järjestelmällinen ero toteutuneeseen (logaritmisena, −0,04 ≈ −4 %). Se vähennetään
+  kauppiaan koulutustilan arvioista ennen kuin laskuri käyttää niitä.
+- **paino** kertoo, kuinka paljon kauppiaan arvioita painotetaan koulutustilan korjauksessa: 1 on oletus,
+  0 poistaa kauppiaan arviot käytöstä ja suurin sallittu on 5. Paino valitaan niin, että kauppiaan arvion
+  vaikutus erittäin harvinaiseen autoon vastaa testin harvinaisten autojen parasta painotusta.
+
+Kauppiastunnus yhdistää testin ja koulutustilan, kun kauppias käyttää samaa selainta. Kun kalibrointitiedosto
+muuttuu GitHubissa, päivitys käynnistyy itsestään ja laskuri alkaa käyttää uusia arvoja. 30 autoa on pieni otos,
+joten paras painotus kutistetaan kohti oletusta eikä yksittäistä tulosta kannata ylitulkita.
+
 ## Käyttöönotto GitHubissa
 
 1. **Luo tietovarasto.** Kirjaudu GitHubiin ja valitse **New repository**. Anna nimi
@@ -232,6 +277,10 @@ node tyokalut/rakenna_malli.mjs
 | `koulutus.html`, `js/koulutus.js` | Koulutustila kauppiaille |
 | `js/palaute.js` | Kauppiaiden arvioiden tallennus, vienti, tuonti ja vertailu toteutuneisiin päätöksiin |
 | `js/apu.js` | Yhteiset muotoilu- ja apufunktiot |
+| `testi.html`, `js/testi.js` | Arviointitesti kauppiaille |
+| `js/testianalyysi.js` | Arviointitestin tulosten laskenta (sivu ja analyysityökalu) |
+| `tyokalut/testipooli.mjs` | Kokoaa testin autot (`data/testi.json`) kuukausiajossa |
+| `tyokalut/analysoi_testi.mjs` | Analysoi testiraportit ja ehdottaa kalibrointia |
 | `js/malli.js` | Arviomalli, verrokkien painotus ja tarkkuustesti |
 | `js/verotaulukot.js` | Viralliset autoveroprosenttitaulukot |
 | `tyokalut/hae_aineisto.py` | Hakee ja muuntaa Verohallinnon Excelit |
@@ -242,6 +291,8 @@ node tyokalut/rakenna_malli.mjs
 | `data/malli.json` | Opetettu malli, hintaindeksi, tarkkuus ja valintalistat |
 | `data/merkit/` | Päätökset ja kauppiaiden arviot merkeittäin; selain lataa vain valitun merkin |
 | `data/palaute/` | Kauppiaiden arviotiedostot koulutustilasta |
+| `data/testi.json` | Arviointitestin autot |
+| `data/kalibrointi.json` | Kauppiaskohtainen harha ja paino arviointitestin perusteella (luodaan tarvittaessa) |
 
 ## Rajoitukset
 

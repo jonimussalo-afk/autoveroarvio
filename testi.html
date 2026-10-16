@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Arviointitesti – tuontiauton autoveroarvio</title>
+  <meta name="description" content="Kauppiaan arviointitesti: arvioi 30 Verohallinnon jo verottaman auton autovero ja vertaa osumaasi laskuriin.">
+  <style>
+    :root {
+      --tausta: #f4f5f7; --kortti: #fff; --teksti: #1d2433; --heikko: #5b6475; --raja: #dde1e8;
+      --paa: #1f4fd1; --paa-vaalea: #e8eefc; --ok: #13795b; --ok-vaalea: #e3f4ee; --varoitus: #9a5b00;
+      --varoitus-vaalea: #fff3df; --vaara: #b42318; --vaara-vaalea: #fde8e7; --kauppias: #b45309;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--tausta);
+      color: var(--teksti); font-size: 15px; line-height: 1.45; }
+    header { background: #111a2e; color: #fff; padding: 18px 24px; }
+    header .sisalto { max-width: 760px; margin: 0 auto; display: flex; flex-wrap: wrap; gap: 10px 24px;
+      align-items: center; justify-content: space-between; }
+    h1 { font-size: 21px; margin: 0; letter-spacing: -0.2px; }
+    header p { margin: 3px 0 0; color: #b8c2d8; font-size: 13.5px; }
+    header a { color: #fff; font-size: 13px; text-decoration: none; border: 1px solid rgba(255,255,255,.35);
+      border-radius: 999px; padding: 4px 12px; }
+    header a:hover { background: rgba(255,255,255,.12); }
+    main { max-width: 760px; margin: 22px auto 40px; padding: 0 20px; }
+    .kortti { background: var(--kortti); border: 1px solid var(--raja); border-radius: 12px; padding: 18px; margin-bottom: 16px; }
+    .kortti h2 { font-size: 16px; margin: 0 0 12px; }
+    .kortti p { margin: 0 0 10px; }
+    label { display: block; font-size: 12.5px; font-weight: 600; color: var(--heikko); margin: 12px 0 4px; }
+    input { width: 100%; padding: 9px 11px; border: 1px solid #c6ccd8; border-radius: 8px; font-size: 16px;
+      background: #fff; color: var(--teksti); font-family: inherit; }
+    input:focus { outline: 2px solid var(--paa-vaalea); border-color: var(--paa); }
+    .pieni { font-size: 12.5px; color: var(--heikko); }
+    .merkit { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; max-height: 260px; overflow-y: auto; padding: 2px; }
+    .merkit button { border: 1px solid #c6ccd8; background: #f7f8fa; border-radius: 999px; padding: 5px 11px; font-size: 13px;
+      cursor: pointer; color: var(--teksti); }
+    .merkit button.valittu { background: var(--kauppias); border-color: var(--kauppias); color: #fff; }
+    .ensisijainen { background: var(--kauppias); color: #fff; border: none; border-radius: 8px; padding: 10px 18px;
+      font-size: 15px; font-weight: 650; cursor: pointer; }
+    .ensisijainen:disabled { opacity: .45; cursor: default; }
+    .toissijainen { background: #fff; color: var(--teksti); border: 1px solid #c6ccd8; border-radius: 8px; padding: 9px 14px;
+      font-size: 14px; cursor: pointer; }
+    .toissijainen:hover { border-color: var(--paa); background: var(--paa-vaalea); }
+    .napisto { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; align-items: center; }
+    .napisto .vali { flex: 1; }
+    .edistys { height: 8px; background: #e6e9ef; border-radius: 999px; overflow: hidden; margin: 6px 0 14px; }
+    .edistys div { height: 100%; background: var(--kauppias); }
+    .auto h3 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.3px; }
+    .tiedot { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px 14px; margin: 12px 0; }
+    .tiedot div { font-size: 14px; }
+    .tiedot span { display: block; font-size: 11.5px; text-transform: uppercase; letter-spacing: .3px; color: var(--heikko); font-weight: 600; }
+    .varmuus { display: flex; flex-wrap: wrap; gap: 6px; }
+    .varmuus button { border: 1px solid #c6ccd8; background: #fff; border-radius: 8px; padding: 6px 12px; font-size: 13.5px; cursor: pointer; }
+    .varmuus button.valittu { background: var(--paa); border-color: var(--paa); color: #fff; }
+    .huomio { background: var(--varoitus-vaalea); border: 1px solid #f1cf95; color: #5c3b00; border-radius: 8px; padding: 10px 12px; font-size: 13.5px; margin-top: 10px; }
+    .virhe { background: var(--vaara-vaalea); border: 1px solid #f3b8b3; color: var(--vaara); border-radius: 8px; padding: 10px 12px; margin-top: 10px; }
+    .isot { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 6px 0 14px; }
+    @media (max-width: 560px) { .isot { grid-template-columns: 1fr; } }
+    .luku { border: 1px solid var(--raja); border-radius: 12px; padding: 12px 14px; }
+    .luku.kauppias { background: var(--kauppias); color: #fff; border-color: var(--kauppias); }
+    .luku .otsake { font-size: 11.5px; text-transform: uppercase; letter-spacing: .4px; opacity: .85; font-weight: 600; }
+    .luku .arvo { font-size: 26px; font-weight: 750; margin-top: 2px; }
+    .luku .alla { font-size: 12.5px; opacity: .9; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .3px; color: var(--heikko);
+      border-bottom: 1px solid var(--raja); padding: 6px; white-space: nowrap; }
+    td { border-bottom: 1px solid #eef0f4; padding: 6px; vertical-align: top; }
+    td.oikea, th.oikea { text-align: right; white-space: nowrap; }
+    .taulukko { overflow-x: auto; }
+    .voitto { color: var(--kauppias); font-weight: 650; }
+    a { color: var(--paa); }
+  </style>
+</head>
+<body>
+<header>
+  <div class="sisalto">
+    <div>
+      <h1>Arviointitesti</h1>
+      <p>30 Verohallinnon jo verottamaa autoa – kuinka lähelle osut?</p>
+    </div>
+    <a href="koulutus.html">← Koulutustila</a>
+  </div>
+</header>
+
+<main>
+  <section class="kortti" id="alku" hidden>
+    <h2>Näin testi toimii</h2>
+    <p>Saat arvioitavaksi 30 autoa, jotka Verohallinto on jo verottanut viime kuukausina. Näet auton tiedot ja
+      veroprosentin, ja arvioit kokemuksesi perusteella, paljonko autoveroa autosta määrättiin. Laskurin arviota
+      ja toteutunutta veroa et näe ennen testin loppua, jotta arviosi on aidosti omasi.</p>
+    <p>Kolmannes autoista on yleisiä malleja, kolmannes harvinaisia ja kolmannes erittäin harvinaisia. Testin
+      lopussa näet, kuinka lähelle osuit ja miten laskuri pärjäsi samoissa autoissa. Tuloksista syntyy raportti,
+      jonka perusteella laskurin painotuksia säädetään. Testiin menee noin 20–30 minuuttia, ja sen voi keskeyttää.</p>
+    <div id="kesken"></div>
+    <label>Valitse merkit, joita tunnet parhaiten</label>
+    <div class="merkit" id="merkit"></div>
+    <p class="pieni" id="valintaTila"></p>
+    <div class="napisto"><button type="button" class="ensisijainen" id="aloita" disabled>Aloita testi</button></div>
+  </section>
+
+  <section class="kortti" id="kysymys" hidden>
+    <div class="pieni" id="edistysTeksti"></div>
+    <div class="edistys"><div id="edistysPalkki"></div></div>
+    <div class="auto" id="auto"></div>
+    <label for="vero">Arvioimasi autovero (€)</label>
+    <input id="vero" inputmode="numeric" autocomplete="off" placeholder="esim. 8500">
+    <div class="pieni" id="vastaa" style="margin-top:4px">&nbsp;</div>
+    <label>Kuinka varma olet?</label>
+    <div class="varmuus" id="varmuus">
+      <button type="button" data-v="arvaus">Arvaus</button>
+      <button type="button" data-v="melko">Melko varma</button>
+      <button type="button" data-v="varma">Varma</button>
+    </div>
+    <label for="huomio">Huomio (valinnainen)</label>
+    <input id="huomio" autocomplete="off" placeholder="esim. harvinainen varustelu tai mihin arviosi perustuu">
+    <div id="kysymysVirhe"></div>
+    <div class="napisto">
+      <button type="button" class="toissijainen" id="edellinen">← Edellinen</button>
+      <span class="vali"></span>
+      <button type="button" class="toissijainen" id="ohita">En osaa arvioida</button>
+      <button type="button" class="ensisijainen" id="seuraava">Seuraava →</button>
+    </div>
+  </section>
+
+  <section id="tulos" hidden></section>
+
+  <div class="kortti" id="virhe" hidden></div>
+</main>
+
+<script type="module" src="js/testi.js"></script>
+</body>
+</html>

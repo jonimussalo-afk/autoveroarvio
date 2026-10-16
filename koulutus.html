@@ -73,6 +73,9 @@
     .sina { color: var(--kauppias); font-weight: 650; }
     .tyhja { color: var(--heikko); text-align: center; padding: 14px; }
     a { color: var(--paa); }
+    .testilinkki { display: block; text-decoration: none; color: var(--teksti); border-color: #f1cf95; background: var(--varoitus-vaalea); }
+    .testilinkki strong { display: block; color: var(--kauppias); margin-bottom: 4px; }
+    .testilinkki:hover { border-color: var(--kauppias); }
   </style>
 </head>
 <body>
@@ -94,6 +97,12 @@
       koska niistä laskurilla on jo runsaasti päätöksiä.</p>
     <p class="pieni" id="tallennusTila" style="margin-top:8px"></p>
   </div>
+
+  <a class="kortti testilinkki" href="testi.html">
+    <strong>Uusi kauppias? Aloita 30 auton arviointitestillä →</strong>
+    <span class="pieni">Arvioit sokkona Verohallinnon jo verottamia autoja. Tuloksista nähdään, kuinka paljon arvioitasi
+      kannattaa painottaa, ja laskuri säädetään niiden mukaan.</span>
+  </a>
 
   <form class="kortti" id="lomake" autocomplete="off" onsubmit="return false">
     <h2>1. Auto</h2>
