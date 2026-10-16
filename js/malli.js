@@ -228,8 +228,10 @@ function ratkaise(A, b) {
  * Yhdistää vuosittaiset JSON-tiedostot yhdeksi sarakemuotoiseksi aineistoksi.
  */
 export function yhdistaAineisto(tiedostot) {
-  const sanasto = { merkki: [], malli: [], sarja: [], kayttovoima: [], korimalli: [], vetotapa: [], vaihteisto: [] };
+  // kauppias: kauppiaan arvioiden nimetön tunnus (koulutustila); "" = Verohallinnon päätös
+  const sanasto = { merkki: [], malli: [], sarja: [], kayttovoima: [], korimalli: [], vetotapa: [], vaihteisto: [], kauppias: [""] };
   const hakemisto = Object.fromEntries(Object.keys(sanasto).map((k) => [k, new Map()]));
+  hakemisto.kauppias.set("", 0);
   const koodaa = (k, v) => {
     let i = hakemisto[k].get(v);
     if (i === undefined) { i = sanasto[k].length; sanasto[k].push(v); hakemisto[k].set(v, i); }
@@ -248,7 +250,7 @@ export function yhdistaAineisto(tiedostot) {
     t: new Float64Array(n), kk: new Int32Array(n), veropros: new Float32Array(n),
     cm3: new Float32Array(n), lcm3: new Float64Array(n), ovet: new Int8Array(n), paasto: new Float32Array(n),
     // lähde: 0 = Verohallinnon päätös, 1 = kauppiaan arvio (koulutustila)
-    lahde: new Uint8Array(n), palauteId: new Float64Array(n),
+    lahde: new Uint8Array(n), palauteId: new Float64Array(n), kauppias: new Int16Array(n),
   };
   let i = 0;
   let viimeisin = 0;
@@ -285,6 +287,7 @@ export function yhdistaAineisto(tiedostot) {
       A.paasto[i] = A.ryhma[i] === 0 ? NaN : paastoVeroprosentista(A.veropros[i], S.ensirek[r]);
       A.lahde[i] = S.lahde && S.lahde[r] ? 1 : 0;
       A.palauteId[i] = S.palauteId ? S.palauteId[r] || 0 : 0;
+      A.kauppias[i] = S.kauppias && D.kauppias ? koodaa("kauppias", D.kauppias[S.kauppias[r]] || "") : 0;
       if (!A.lahde[i] && S.paatos[r] > viimeisin) viimeisin = S.paatos[r];
       i++;
     }
@@ -1004,11 +1007,17 @@ export function kauppiasKorjaus(aineisto, malli, kohde, tulos, { palauteSuodin =
   const lkw = Math.log(kohde.kw);
   let muisti = kauppiasArvioValimuisti.get(aineisto);
   if (!muisti) { muisti = new Map(); kauppiasArvioValimuisti.set(aineisto, muisti); }
+  // Arviointitestin perusteella kauppiaskohtainen harha (log) ja paino (data/kalibrointi.json)
+  const kalibroinnit = (malli.kauppiaskalibrointi && malli.kauppiaskalibrointi.kauppiaat) || {};
   let sw = 0, swe = 0;
   const lista = [];
   for (const r of aineisto.merkkiRyhma.get(bi * 3 + gi) || []) {
     if (!A.lahde[r]) continue;
     if (palauteSuodin && !palauteSuodin(A.palauteId[r])) continue;
+    const kal = kalibroinnit[sanasto.kauppias ? sanasto.kauppias[A.kauppias[r]] : ""] || null;
+    const kauppiasPaino = kal && Number.isFinite(kal.paino) ? kal.paino : 1;
+    const kauppiasHarha = kal && Number.isFinite(kal.harha) ? kal.harha : 0;
+    if (kauppiasPaino <= 0) continue;
     const taso = tasoKartta.get(A.malli[r]);
     const tasoPaino = taso === "malli" ? 1 : taso === "sarja" ? KA.sarjaPaino : 0;
     if (!tasoPaino) continue;
@@ -1016,7 +1025,7 @@ export function kauppiasKorjaus(aineisto, malli, kohde, tulos, { palauteSuodin =
     const di = (A.ika[r] - ika) / KA.ikaHajonta;
     const dm = Math.log((A.km[r] + 5) / (kohde.km + 5)) / KA.kmHajonta;
     const kkSitten = Math.abs(kohde.verotus - A.paatos[r]) / (VUOSI_MS / 12);
-    const w = tasoPaino * Math.exp(-0.5 * (dk * dk + di * di + dm * dm)) * Math.pow(0.5, kkSitten / KA.puoliintumisKk);
+    const w = kauppiasPaino * tasoPaino * Math.exp(-0.5 * (dk * dk + di * di + dm * dm)) * Math.pow(0.5, kkSitten / KA.puoliintumisKk);
     if (w < 0.01) continue;
     let m = muisti.get(r);
     if (m === undefined) {
@@ -1025,7 +1034,7 @@ export function kauppiasKorjaus(aineisto, malli, kohde, tulos, { palauteSuodin =
       muisti.set(r, m);
     }
     if (!Number.isFinite(m)) continue;
-    const jaannos = A.y[r] - m;
+    const jaannos = A.y[r] - m - kauppiasHarha;
     sw += w; swe += w * jaannos;
     lista.push({ r, paino: w, jaannos, laskuri: m });
   }

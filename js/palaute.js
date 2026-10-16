@@ -100,7 +100,7 @@ const pvmLuvuksi = (s) => Number(String(s).slice(0, 10).replaceAll("-", ""));
  * Päätöspäiväksi tulee arvion antopäivä.
  */
 export function palautteetTiedostoksi(lista) {
-  const SAN = ["merkki", "malli", "kayttovoima", "korimalli", "vetotapa", "vaihteisto"];
+  const SAN = ["merkki", "malli", "kayttovoima", "korimalli", "vetotapa", "vaihteisto", "kauppias"];
   const sanastot = Object.fromEntries(SAN.map((c) => [c, []]));
   const hak = Object.fromEntries(SAN.map((c) => [c, new Map()]));
   const koodaa = (c, v) => {
@@ -130,6 +130,7 @@ export function palautteetTiedostoksi(lista) {
     S.veropros.push(p.veroprosentti);
     S.lahde.push(1);
     S.palauteId.push(p.id);
+    S.kauppias.push(koodaa("kauppias", p.kauppias || ""));
   }
   return { merkki: null, rivit: lista.length, sanastot, sarakkeet: S };
 }
