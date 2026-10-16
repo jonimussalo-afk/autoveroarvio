@@ -179,14 +179,22 @@ kuinka osuvia kauppiaan arviot ovat ja kuinka paljon niitä kannattaa painottaa.
 1. Kauppias valitsee merkit, joita tuntee parhaiten. Testi poimii niistä 30 autoa, jotka Verohallinto on
    verottanut viimeisen kuuden kuukauden aikana: kolmannes yleisiä, kolmannes harvinaisia ja kolmannes
    erittäin harvinaisia malleja. Vajaa luokka täydennetään muilla saman merkin autoilla.
-2. Kauppias näkee auton tiedot ja veroprosentin ja arvioi autoveron. Laskurin arviota ja toteutunutta veroa
-   hän ei näe ennen testin loppua, jotta arvio on aidosti hänen omansa. Hän voi merkitä, kuinka varma on, ja
-   kirjoittaa huomion. Testin voi keskeyttää; vastaukset säilyvät selaimessa.
+2. Kauppias näkee auton tiedot (myös iän ja ajokilometrit verotushetkellä) ja veroprosentin ja arvioi autoveron
+   nykyhinnoin. Laskurin arviota ja toteutunutta veroa hän ei näe ennen testin loppua, jotta arvio on aidosti
+   hänen omansa. Hän voi merkitä, kuinka varma on, ja kirjoittaa huomion. Testin voi keskeyttää; vastaukset
+   säilyvät selaimessa.
 3. Lopussa kauppias näkee, kuinka lähelle hän osui ja miten laskuri pärjäsi samoissa autoissa, ja lataa
    raportin (JSON, lisäksi taulukkona CSV). Raportti lähetetään ylläpitäjälle.
 
 Testin autot ovat tiedostossa `data/testi.json`, joka päivittyy kuukausiajossa. Laskurin arvio on laskettu
 kustakin autosta ilman autoa itseään, joten vertailu kauppiaan ja laskurin välillä on reilu.
+
+**Nykyhinnat.** Kauppias arvioi nykyhinnoin, mutta autot on verotettu viimeisen kuuden kuukauden aikana. Siksi
+toteutunut verotusarvo muutetaan vertailussa nykyiseen hintatasoon laskurin hintaindeksillä (käyttövoimaryhmittäin,
+verotuskuukaudesta uusimpaan kuukauteen, jolta päätöksiä on). Kerroin on testipoolissa jokaisen auton kohdalla
+(`nykyhinta.kerroin`), ja muutos on tyypillisesti alle ±3 %. Laskurin omaa arviota verrataan toteutuneeseen
+sellaisenaan, koska se on laskettu verotushetken hintatasolla. Raportissa on vertailun vuoksi myös kauppiaan
+virhe ilman korjausta.
 
 **Raportin analyysi.** Raportissa on valmis ohje tekoälylle (kenttä `ohjeTekoalylle`): sen voi antaa
 esimerkiksi Claudelle sellaisenaan. Samat luvut saa myös komennolla
