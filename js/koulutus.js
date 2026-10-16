@@ -215,9 +215,12 @@ const VAIKUTUS = {
 function piirraArvio() {
   const { tulos, hv, prosentti, vp } = nykyinen;
   const vero = (x) => (prosentti == null ? null : (x * prosentti) / 100);
+  const kal = omaKalibrointi();
   const [luokka, sana, selitys] = prosentti === 0
     ? ["ei", "Ei vaikutusta", "Auto on veroton, joten arvio autoverosta ei kerro sen arvosta."]
-    : VAIKUTUS[tulos.tuki] || VAIKUTUS.E;
+    : kal && kal.paino === 0
+      ? ["ei", "Ei toistaiseksi", "Arviointitestin perusteella arviosi eivät tällä hetkellä muuta laskurin arvioita. Ne tallentuvat silti, ja niitä verrataan toteutuneisiin päätöksiin; painoa voidaan nostaa myöhemmin."]
+      : VAIKUTUS[tulos.tuki] || VAIKUTUS.E;
   const lahella = Math.max(hv.malli, hv.sarja);
   const kp = tulos.kauppias;
   $("laskurinArvio").innerHTML = `
@@ -296,7 +299,9 @@ async function tallenna() {
   tulosEl.innerHTML = `<div class="ok"><strong>Arvio tallennettu.</strong> ${muuttui
     ? `Laskurin arvio tälle autolle on nyt ${euro((nyt * n.prosentti) / 100)} (ennen ${euro((ennen * n.prosentti) / 100)}).
        Laskuri ottaa arviostasi huomioon osan, koska yksittäinen arvio voi osua ohi; useampi arvio samanlaisista autoista korjaa enemmän.`
-    : "Laskurin arvio tälle autolle ei muuttunut, koska mallista on runsaasti Verohallinnon päätöksiä."}
+    : omaKalibrointi() && omaKalibrointi().paino === 0
+      ? "Laskurin arvio ei muuttunut, koska arviointitestin perusteella arviosi eivät toistaiseksi vaikuta laskuriin. Arvio verrataan myöhemmin toteutuneeseen päätökseen."
+      : "Laskurin arvio tälle autolle ei muuttunut, koska mallista on runsaasti Verohallinnon päätöksiä."}
     ${pysyva ? "" : "<br>Huom. selaimen muisti ei ole käytössä: lataa arviot tiedostona ennen kuin suljet sivun."}</div>`;
   $("omaVero").value = "";
   $("huomio").value = "";
@@ -405,9 +410,16 @@ async function tuo(e) {
 
 // ---------- tilatiedot ----------
 
+/** Tämän kauppiaan kalibrointi arviointitestin perusteella (data/kalibrointi.json kautta malli.json:ssa). */
+function omaKalibrointi() {
+  const k = malli && malli.kauppiaskalibrointi && malli.kauppiaskalibrointi.kauppiaat;
+  return k ? k[kauppiasTunnus()] || null : null;
+}
+
 function naytaTallennustila() {
   $("tallennusTila").innerHTML = pysyvaTallennus()
-    ? `Arviot tallentuvat tähän selaimeen. Kauppiastunnuksesi on ${esc(kauppiasTunnus())} (satunnainen, ei sisällä nimeäsi).`
+    ? `Arviot tallentuvat tähän selaimeen. Kauppiastunnuksesi on ${esc(kauppiasTunnus())} (satunnainen, ei sisällä nimeäsi).` +
+      (omaKalibrointi() ? ` Arvioidesi paino on säädetty arviointitestin perusteella${omaKalibrointi().paino === 0 ? ": ne eivät toistaiseksi muuta laskurin arvioita" : ` (paino ${String(omaKalibrointi().paino).replace(".", ",")})`}.` : "")
     : `Selaimen muisti ei ole käytössä (esimerkiksi yksityinen ikkuna), joten arviot katoavat, kun suljet sivun. Lataa ne tiedostona ennen sulkemista.`;
 }
 
