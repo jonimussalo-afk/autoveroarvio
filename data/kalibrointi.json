@@ -1,0 +1,19 @@
+{
+ "paivitetty": "2026-10-16",
+ "perustelu": "Kauppiaskohtainen kalibrointi arviointitestin perusteella. paino 0 = kauppiaan koulutustilan arviot eivät muuta laskurin arvioita (ne tallentuvat ja niitä verrataan toteutuneisiin päätöksiin); 1 = oletus. harha = kauppiaan järjestelmällinen ero toteutuneeseen (log), joka vähennetään hänen arvioistaan.",
+ "kauppiaat": {
+  "K-FA5F78": {
+   "harha": 0,
+   "paino": 0,
+   "testi": {
+    "pvm": "2026-10-16",
+    "vastattu": 30,
+    "kauppiaanMediaaniVirhePros": 21.7,
+    "laskurinMediaaniVirhePros": 7.3,
+    "kauppiasLahempana": 10,
+    "mitattuHarha": 0.068,
+    "huomio": "Kauppiaan arvio ei tuonut lisätietoa laskurin rinnalle (paras yhdistelmä noin 10 % kauppiasta). Virhe riippuu auton arvosta ja kilometreistä: vanhat ja paljon ajetut liian korkeiksi, kalliit ja uudemmat liian matalaksi."
+   }
+  }
+ }
+}
